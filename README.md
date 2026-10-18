@@ -134,6 +134,63 @@ Useful switches while debugging: `ENGINE_LAB_NO_PREFAULT`, `ENGINE_LAB_NO_BIGUP`
 `ENGINE_LAB_NO_STAGING`, and the timing probes (`ENGINE_LAB_VKT`, the cache stats printed on
 shutdown).
 
+## Trying a different GPU
+
+Nothing in the cache path is tied to the Radeon VII, but the numbers above were tuned on it, and the
+defaults reflect one specific balance of VRAM, PCIe bandwidth and host RAM. If you try another card,
+these are the things to experiment with, roughly in order of how much they matter.
+
+**Sizing (command-line flags)**
+
+| Knob | Where | What to try on another GPU |
+|---|---|---|
+| `--moe-cache-mib` | flag | The big one. Set it to what is left after weights, KV cache and compute buffers. Hit rate scales with it, so a 24 GB card can hold a much larger cache and a 12 GB card a much smaller one. Watch VRAM use: if it overruns, buffers spill into system RAM and the gain collapses (we saw this above 9000 MiB at 64K context on 16 GB). |
+| `-c`, `-ctk/-ctv` | flags | Context and KV quantization compete with the cache for VRAM. Trade context for cache or the reverse. |
+| `-ub` / `-b` | flags | Prefill batch size. 512 fit at 64K context here, and 1024 was a little faster for prefill at 32K. Larger batches need larger compute buffers. |
+| `-t` | flag | CPU threads for the non-expert work. 14 matched the physical cores of the test CPU. |
+
+**Host-side copy path (`src/llama-moe-cache.cpp`)**
+
+These depend on your PCIe generation and host memory bandwidth, not on the GPU vendor.
+
+| Knob | Default | Notes |
+|---|---|---|
+| `ENGINE_LAB_CPY_THREADS` | 3 (launcher uses 6) | Size of the memcpy pool. More threads help until you saturate DDR bandwidth. A dual-channel desktop will want fewer than a quad-channel workstation. |
+| `big_half` (constant) | 96 MiB | Size of each half of the double-buffered prefill upload buffer. |
+| `chunk` (constant) | 128 KiB | Per-worker copy chunk. Copies of 256 KiB or less skip the pool. |
+| idle spin (`idle < 20000`) | about 20k pauses | How long workers spin before sleeping on the futex. Raise it for lower latency, lower it to save CPU. |
+| prefault threads (the `8` in `stg_init`) | 8 | Threads used to `MADV_POPULATE_READ` the model at startup. |
+| `ENGINE_LAB_NO_PREFAULT`, `_NO_BIGUP`, `_NO_STAGING` | off | Disable each optimization to measure what it is worth on your hardware. |
+
+**Vulkan backend (`ggml/src/ggml-vulkan/ggml-vulkan.cpp`)**
+
+| Knob | Notes |
+|---|---|
+| The `AMD_GCN` branch that sets `rm_kq_int = 4` | The one kernel default I changed. It is already limited to AMD GCN (Vega and Radeon VII). On RDNA, NVIDIA or Intel this change has no effect, but it is the first place to look if you want to tune matvec row counts for your architecture. |
+| `ENGINE_LAB_RM_STDQ_INT`, `ENGINE_LAB_RM_KQ_INT`, `ENGINE_LAB_WG` | Override rows-per-workgroup and workgroup size from the environment so you can sweep them without rebuilding. |
+| `ENGINE_LAB_FLOPS_DIV`, `GGML_VK_MAX_NODES_PER_SUBMIT` | Submit granularity. The default was best on the Radeon VII, but drivers differ. Try it once. |
+| `ENGINE_LAB_VKT=1` | Prints CPU record-and-submit time per graph, which tells you how much of your per-layer cost is driver overhead. |
+
+**Environment and platform**
+
+- `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM=1` works around a memory-placement problem on cards without
+  resizable BAR. If your card has resizable BAR it is probably unnecessary, but it should be harmless.
+  If decode speed is very uneven from run to run, check for it first.
+- The copy pool uses Linux futexes and `madvise(MADV_POPULATE_READ)`, so it is Linux-only today.
+  Windows and macOS need equivalents (`WaitOnAddress`, a prefault loop).
+- Only Vulkan on AMD has been tested. The cache logic uses generic backend calls and should work
+  with CUDA or HIP builds too, but that is untested. Please report results either way.
+
+**How to tell what limits you**
+
+Start the server with the cache stats on (they print at shutdown) and compare:
+
+- Low hit rate: give the cache more VRAM, or shrink context and batch size.
+- High hit rate but slow decode: the per-layer fixed cost dominates. Check `ENGINE_LAB_VKT` and
+  the "decode(1 tok)" line for gap time versus upload time.
+- Slow prefill: check the "big uploads" memcpy time. If the prefault step reports many seconds,
+  your model is probably on a slow disk or not in the page cache yet.
+
 ## What is in the repo
 
 | Path | Contents |
