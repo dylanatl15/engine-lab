@@ -1,0 +1,28 @@
+start 2026-10-18T06:02:23+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15778}lease 563 granted 2026-10-18T06:02:26+00:00
+vram free check: 10 MiB used
+== grid
+ Vulkan        99         64     0              tg64 
+ Vulkan        99         64     0              tg96 
+ Vulkan        99         64     0             tg128 
+ Vulkan        99         64     0             tg256 
+ Vulkan        99         64     0             tg320 
+ Vulkan        99        128     0              tg64 
+ Vulkan        99        128     0              tg96 
+ Vulkan        99        128     0             tg128 
+ Vulkan        99        128     0             tg256 
+ Vulkan        99        128     0             tg320 
+ Vulkan        99        256     0              tg64 
+ Vulkan        99        256     0              tg96 
+ Vulkan        99        256     0             tg128 
+== pp
+ Vulkan        99        256     0               pp1 
+ Vulkan        99        256     0              pp16 
+ Vulkan        99        256     0              pp64 
+ Vulkan        99        256     0             pp512 
+ Vulkan        99        256     0             tg128 
+== b
+ Vulkan        99      4096        256     0 
+done 2026-10-18T06:05:35+00:00
+vram at release: 10 MiB
+release http=200 body={"ok":true}

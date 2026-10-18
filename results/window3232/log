@@ -1,0 +1,25 @@
+start 2026-10-18T09:28:05+00:00 cache=8000 jobs=6
+lease 32 2026-10-18T09:28:07+00:00
+vram free check: 10 MiB
+mode 0 up 2026-10-18T09:29:10+00:00
+{"text": "A hash map handles collisions by using techniques like chaining or open addressing when two different keys produce the same hash index. In chaining, each bucket contains a linked list or tree of entries, allowing multiple values to coexist at the same index without overwriting each other. Open addressing, on the other hand, resolves collisions by probing for the next available empty slot
+{"text": "A hash map handles collisions by using techniques 
+context ~31432 tokens
+  vault: PASS (234s, prompt_n=31513) answer='KESTREL-4471'
+  cron: PASS (14s, prompt_n=1024) answer='09:47 UTC'
+  port: PASS (14s, prompt_n=1025) answer='7731'
+  bucket: PASS (14s, prompt_n=1021) answer='zephyr-archive-b'
+  tok: PASS (13s, prompt_n=1020) answer='QX-88-LIMA'
+  2hop: PASS (16s, prompt_n=1028) answer='5530'
+NEEDLE 6/6
+1.01.082.767 I llama_moe_cache: prefaulted 144 host weights in 12.7 s
+1.01.082.778 I llama_moe_cache: pinned upload staging = 369.80 MiB
+6.22.424.972 I llama_moe_cache: timing: 32490 copy calls, readback+sync 56.1 us/call, plan 394.6 us/call, upload-submit 193.4 us/call, 244011 upload calls
+6.22.424.978 I llama_moe_cache: big uploads: 709818 chunks, 911062.2 MiB, memcpy 46.97 s, submit 1.03 s, sync 45.67 s (4741 syncs)
+6.22.424.983 I llama_moe_cache: decode(1 tok): 31881 calls, gap(gpu compute+cpu) 1170.6 us, readback+sync 55.7 us, upload 164.4 us (memcpy 152.5 us), 3.74 MiB/call
+6.22.424.986 I llama_moe_cache: ubatch <= 8: hits = 254146, misses = 75705, hit rate = 77.05%, uploaded = 126817.90 MiB
+6.22.424.988 I llama_moe_cache: ubatch  > 8: hits = 2060, misses = 6222, hit rate = 24.87%, uploaded = 10438.13 MiB
+6.22.424.989 I llama_moe_cache: large batches: 464133 experts copied from the cache, 255809.64 MiB
+done 2026-10-18T09:34:32+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

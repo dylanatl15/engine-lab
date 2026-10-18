@@ -1,0 +1,39 @@
+start 2026-10-18T08:01:47+00:00 cache=9000 jobs=2
+lease 7 2026-10-18T08:01:50+00:00
+vram free check: 10 MiB
+server up 2026-10-18T08:02:30+00:00 vram=13884 MiB
+Traceback (most recent call last):
+  File "/home/dylan/AI/engine-lab/trace/prompts.py", line 53, in <module>
+    t0 = time.time(); r = post(b); tm = r.get("timings", {}); tot += tm.get("predicted_n", 0)
+                          ~~~~^^^
+  File "/home/dylan/AI/engine-lab/trace/prompts.py", line 48, in post
+    return json.load(urllib.request.urlopen(r, timeout=3600))
+                     ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 187, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 487, in open
+    response = self._open(req, data)
+  File "/usr/lib/python3.14/urllib/request.py", line 504, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+                              '_open', req)
+  File "/usr/lib/python3.14/urllib/request.py", line 464, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.14/urllib/request.py", line 1350, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 1325, in do_open
+    r = h.getresponse()
+  File "/usr/lib/python3.14/http/client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response
+done 2026-10-18T08:02:45+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

@@ -1,0 +1,42 @@
+start 2026-10-18T09:34:59+00:00 cache=8000 jobs=6
+lease 33 2026-10-18T09:35:01+00:00
+vram free check: 10 MiB
+mode 0 up 2026-10-18T09:35:31+00:00
+{"text": "A hash map handles collisions by using techniques like chaining or open addressing when two different keys produce the same hash index. In chaining, each bucket contains a linked list or tree of entries, allowing multiple values to coexist at the same index without overwriting each other. Open addressing, on the other hand, resolves collisions by probing for the next available empty slot
+{"text": "A hash map handles collisions by using techniques 
+  dates-tz: PASS  calls=10 badjson=0 tokens=658 71s
+  dates-tz: PASS  calls=5 badjson=0 tokens=440 40s
+  dates-tz: PASS  calls=11 badjson=0 tokens=603 59s
+dates-tz: 3/3
+  config-edit: PASS  calls=10 badjson=0 tokens=1200 100s
+  config-edit: PASS  calls=3 badjson=0 tokens=309 29s
+  config-edit: PASS  calls=3 badjson=0 tokens=325 28s
+config-edit: 3/3
+  grep-issue: PASS  calls=3 badjson=0 tokens=359 34s
+  grep-issue: PASS  calls=3 badjson=0 tokens=399 35s
+  grep-issue: PASS  calls=5 badjson=0 tokens=917 68s
+grep-issue: 3/3
+  version-bump: PASS  calls=15 badjson=0 tokens=904 82s
+  version-bump: PASS  calls=15 badjson=0 tokens=960 80s
+  version-bump: PASS  calls=17 badjson=0 tokens=1214 100s
+version-bump: 3/3
+  no-tool: FAIL  calls=0 badjson=0 tokens=70 7s
+  no-tool: PASS  calls=0 badjson=0 tokens=54 4s
+  no-tool: PASS  calls=0 badjson=0 tokens=43 3s
+no-tool: 2/3
+  enum-map: PASS  calls=1 badjson=0 tokens=154 14s
+  enum-map: PASS  calls=1 badjson=0 tokens=171 14s
+  enum-map: PASS  calls=1 badjson=0 tokens=178 14s
+enum-map: 3/3
+TOTAL 17/18
+0.28.422.555 I llama_moe_cache: prefaulted 144 host weights in 3.5 s
+0.28.422.571 I llama_moe_cache: pinned upload staging = 369.80 MiB
+13.45.249.967 I llama_moe_cache: timing: 437939 copy calls, readback+sync 55.1 us/call, plan 9.7 us/call, upload-submit 158.9 us/call, 3305811 upload calls
+13.45.249.973 I llama_moe_cache: big uploads: 1396502 chunks, 628196.9 MiB, memcpy 32.25 s, submit 1.27 s, sync 13.49 s (3235 syncs)
+13.45.249.979 I llama_moe_cache: decode(1 tok): 433483 calls, gap(gpu compute+cpu) 1125.2 us, readback+sync 55.0 us, upload 151.9 us (memcpy 140.1 us), 4.01 MiB/call
+13.45.249.981 I llama_moe_cache: ubatch <= 8: hits = 3348137, misses = 1089346, hit rate = 75.45%, uploaded = 1810544.53 MiB
+13.45.249.983 I llama_moe_cache: ubatch  > 8: hits = 4550, misses = 13197, hit rate = 25.64%, uploaded = 22161.30 MiB
+13.45.249.984 I llama_moe_cache: large batches: 905532 experts copied from the cache, 498826.12 MiB
+done 2026-10-18T09:48:49+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

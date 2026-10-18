@@ -1,0 +1,11 @@
+start 2026-10-18T21:49:02+00:00 cache=0 jobs=6
+lease 35 2026-10-18T21:49:02+00:00
+vram free check: 10 MiB
+mode 0 up 2026-10-18T21:49:08+00:00
+{"text": "A hash map handles collisions by using a technique called chaining, where multiple entries that hash to the same index are stored in a linked list or another data structure at that specific bucket. When a collision occurs, the new key-value pair is simply appended to the existing list at that index rather than overwriting the previous entry. During retrieval, the map calculates the hash 
+{"text": "A hash map handles collisions by using a technique
+{"text": "A hash map handles collisions by using a technique called chaining, where multiple entries that hash to the same index are stored in a linked list or another data structure at that specific bucket. When a collision occurs, the new key-value pair is simply appended to the existing list at t
+idle cpu: 0.0%
+done 2026-10-18T21:49:59+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

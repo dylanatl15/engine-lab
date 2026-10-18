@@ -1,0 +1,10 @@
+start 2026-10-18T04:50:59+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15867}lease 558 granted 2026-10-18T04:51:01+00:00
+vram free check: 10 MiB used
+== production unsloth b11541, fa0 f16
+== upstream master, fa0 f16
+== upstream master, fa1 f16
+== upstream per-kernel perf logger
+done 2026-10-18T04:53:09+00:00
+vram at release: 10 MiB
+{"ok":true}

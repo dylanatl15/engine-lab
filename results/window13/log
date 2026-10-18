@@ -1,0 +1,6 @@
+start 2026-10-18T06:19:15+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15778}lease 570 granted 2026-10-18T06:19:18+00:00
+vram free check: 10 MiB used
+done 2026-10-18T06:19:27+00:00
+vram at release: 10 MiB
+release http=200 body={"ok":true}

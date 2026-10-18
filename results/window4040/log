@@ -1,0 +1,26 @@
+start 2026-10-18T22:26:39+00:00 cache=5500 jobs=3
+lease 51 2026-10-18T22:26:41+00:00
+vram free check: 10 MiB
+0.39.065.303 I print_info: FIM MID token         = 248061 '<|fim_middle|>'
+0.39.065.304 I print_info: FIM PAD token         = 248063 '<|fim_pad|>'
+0.39.065.304 I print_info: FIM REP token         = 248064 '<|repo_name|>'
+0.39.065.304 I print_info: FIM SEP token         = 248065 '<|file_sep|>'
+0.39.065.304 I print_info: EOG token             = 248044 '<|endoftext|>'
+0.39.065.305 I print_info: EOG token             = 248046 '<|im_end|>'
+0.39.065.305 I print_info: EOG token             = 248063 '<|fim_pad|>'
+0.39.065.305 I print_info: EOG token             = 248064 '<|repo_name|>'
+0.39.065.306 I print_info: EOG token             = 248065 '<|file_sep|>'
+0.39.065.306 I print_info: max token length      = 256
+0.39.065.728 I load_tensors: loading model tensors, this can take a while... (load_mode = mmap)
+0.39.130.626 E llama_model_load: error loading model: check_tensor_dims: tensor 'token_embd.weight' not found
+0.39.130.633 E llama_model_load_from_file_impl: failed to load model
+0.39.130.635 E common_speculative_init_result: failed to load draft model, '/home/dylan/AI/llm-models/unsloth-FlashNext/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf'
+0.39.130.652 E srv    load_model: failed to load draft model, '/home/dylan/AI/llm-models/unsloth-FlashNext/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf'
+0.39.130.666 I srv    operator(): operator(): cleaning up before exit...
+0.39.133.347 E srv  llama_server: exiting due to model loading error
+0.39.136.812 I llama_moe_cache: timing: 48 copy calls, readback+sync 74.9 us/call, plan 12210.5 us/call, upload-submit 1587.4 us/call, 2493 upload calls
+0.39.136.819 I llama_moe_cache: decode(1 tok): 1 calls, gap(gpu compute+cpu) 4302.4 us, readback+sync 71.2 us, upload 1004.9 us (memcpy 945.4 us), 20.75 MiB/call
+0.39.136.821 I llama_moe_cache: ubatch <= 8: hits = 0, misses = 864, hit rate = 0.00%, uploaded = 1431.35 MiB
+done 2026-10-18T22:27:23+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

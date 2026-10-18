@@ -1,0 +1,11 @@
+start 2026-10-18T07:43:51+00:00 cache=9000 jobs=4
+lease 6 2026-10-18T07:43:54+00:00
+vram free check: 10 MiB
+server up 2026-10-18T07:44:46+00:00 vram=13884 MiB
+1/4 87s pp_n=1242 tg_n=200 tg=8.1 total_decode=200
+2/4 41s pp_n=412 tg_n=200 tg=9.7 total_decode=400
+3/4 30s pp_n=104 tg_n=200 tg=9.2 total_decode=600
+4/4 22s pp_n=30 tg_n=200 tg=10.6 total_decode=800
+done 2026-10-18T07:47:47+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

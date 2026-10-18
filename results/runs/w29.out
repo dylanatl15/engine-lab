@@ -1,0 +1,27 @@
+start 2026-10-18T09:23:47+00:00 cache=8000 jobs=3
+lease 29 2026-10-18T09:23:50+00:00
+vram free check: 10 MiB
+server died (mode 0)
+0.01.775.987 I print_info: EOG token             = 248064 '<|repo_name|>'
+0.01.775.987 I print_info: EOG token             = 248065 '<|file_sep|>'
+0.01.775.987 I print_info: max token length      = 256
+0.01.776.268 I load_tensors: loading model tensors, this can take a while... (load_mode = none)
+0.01.777.728 I add: tensor per_layer_token_embd.weight (size = 27465 MiB) lazy read enabled
+0.02.045.413 I load_tensors: enabling prefetch for 'per_layer_token_embd.weight'
+0.14.080.263 I load_tensors: offloading output layer to GPU
+0.14.080.272 I load_tensors: offloading 47 repeating layers to GPU
+0.14.080.273 I load_tensors: offloaded 49/49 layers to GPU
+0.14.080.345 I load_tensors:      Vulkan0 model buffer size =  3664.69 MiB
+0.14.080.931 I load_tensors:  Vulkan_Host model buffer size = 41185.50 MiB
+0.14.081.462 I load_tensors:   CPU_Mapped model buffer size = 27465.95 MiB
+radv/amdgpu: Not enough memory for command submission.
+0.15.119.948 E ggml_vulkan: device lost on Vulkan0
+0.17.367.019 E llama_model_load: error loading model: vk::Queue::submit: ErrorDeviceLost
+0.17.367.047 E llama_model_load_from_file_impl: failed to load model
+0.17.368.942 E cmn  common_init_: failed to load model '/home/dylan/AI/llm-models/flash-next/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf'
+0.17.370.156 E srv    load_model: failed to load model, '/home/dylan/AI/llm-models/flash-next/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf'
+0.17.370.509 I srv    operator(): operator(): cleaning up before exit...
+0.17.373.040 E srv  llama_server: exiting due to model loading error
+done 2026-10-18T09:24:08+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

@@ -1,0 +1,17 @@
+start 2026-10-18T08:54:21+00:00 cache=9000 jobs=1
+lease 15 2026-10-18T08:54:21+00:00
+vram free check: 10 MiB
+mode 1 up 2026-10-18T08:54:29+00:00
+{"text": "A hash map handles collisions by using a technique called chaining, where multiple entries that hash to the same index are stored in a linked list or another data structure at that specific bucket. When a collision occurs, the new key-value pair is simply appended to the existing list at that index rather than overwriting the previous entry. During a lookup, the hash map calculates the i
+{"text": "A hash map handles collisions by using a technique
+1/1 30s pp_n=556 tg_n=100 tg=8.0 total_decode=100
+0.05.139.519 I llama_moe_cache: pinned upload staging = 177.80 MiB
+1.03.646.646 I llama_moe_cache: timing: 12668 copy calls, readback+sync 75.0 us/call, plan 2.6 us/call, upload-submit 403.8 us/call, 49944 upload calls
+1.03.646.657 I llama_moe_cache: decode(1 tok): 12341 calls, gap(gpu compute+cpu) 2327.5 us, readback+sync 74.7 us, upload 185.8 us (memcpy 174.0 us), 1.23 MiB/call
+1.03.646.659 I llama_moe_cache: hybrid: 12341 calls, 7.97 hits/call, 2.03 cpu-computed/call, 0.743 inserted/call
+1.03.646.662 I llama_moe_cache: ubatch <= 8: hits = 100643, misses = 27318, hit rate = 78.65%, uploaded = 18961.60 MiB
+1.03.646.668 I llama_moe_cache: ubatch  > 8: hits = 2478, misses = 5818, hit rate = 29.87%, uploaded = 9750.00 MiB
+1.03.646.670 I llama_moe_cache: large batches: 32742 experts copied from the cache, 18168.75 MiB
+done 2026-10-18T08:55:26+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

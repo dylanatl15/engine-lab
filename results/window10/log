@@ -1,0 +1,22 @@
+start 2026-10-18T06:10:53+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15778}lease 567 granted 2026-10-18T06:10:56+00:00
+vram free check: 10 MiB used
+== base
+       64 |   0 |            tg64 |         28.27 ± 0.38 |
+== nommvq
+       64 |   0 |            tg64 |         24.39 ± 0.28 |
+== forcemmvq
+       64 |   0 |            tg64 |         28.24 ± 0.33 |
+== nofusion
+       64 |   0 |            tg64 |         27.58 ± 0.27 |
+== nodot
+       64 |   0 |            tg64 |         24.43 ± 0.18 |
+== nodot2
+       64 |   0 |            tg64 |         28.33 ± 0.36 |
+== nomultiadd
+       64 |   0 |            tg64 |         28.17 ± 0.39 |
+== nograph
+       64 |   0 |            tg64 |         28.10 ± 0.13 |
+done 2026-10-18T06:12:10+00:00
+vram at release: 10 MiB
+release http=200 body={"ok":true}

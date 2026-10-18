@@ -1,0 +1,15 @@
+start 2026-10-18T06:55:13+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15780}lease 4 granted 2026-10-18T06:55:16+00:00
+vram free check: 10 MiB used
+           pp512          238.09 ± 0.00 
+  pp512 @ d16384          173.69 ± 0.00 
+           pp512          236.62 ± 0.00 
+  pp512 @ d16384          150.83 ± 0.00 
+           pp512          237.33 ± 0.00 
+  pp512 @ d16384          171.62 ± 0.00 
+   tg64 @ d63488           21.57 ± 0.00 
+vram peak check: 12738 MiB
+done 2026-10-18T07:08:08+00:00
+gtt at end: 847
+vram at release: 10 MiB
+release http=200 body={"ok":true}

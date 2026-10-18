@@ -1,0 +1,19 @@
+start 2026-10-18T05:49:48+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15778}lease 560 granted 2026-10-18T05:49:51+00:00
+vram free check: 10 MiB used
+== slow_perf
+| Vulkan     |  99 |      256 |   0 |           tg128 |          9.98 ± 0.00 |
+== fast_perf
+| Vulkan     |  99 |      256 |   0 |           tg256 |         24.09 ± 0.00 |
+== slow_sched
+| Vulkan     |  99 |      256 |   0 |           tg128 |         11.03 ± 0.00 |
+== map_96
+| Vulkan     |  99 |      256 |   0 |            tg96 |         10.89 ± 0.00 |
+== map_112
+| Vulkan     |  99 |      256 |   0 |           tg112 |         10.94 ± 0.00 |
+== map_160
+| Vulkan     |  99 |      256 |   0 |           tg160 |         10.89 ± 0.00 |
+== map_192
+| Vulkan     |  99 |      256 |   0 |           tg192 |         10.93 ± 0.00 |
+done 2026-10-18T05:51:49+00:00
+vram at release: 10 MiB

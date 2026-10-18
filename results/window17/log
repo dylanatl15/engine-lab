@@ -1,0 +1,7 @@
+start 2026-10-18T06:24:32+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15778}lease 574 granted 2026-10-18T06:24:34+00:00
+vram free check: 10 MiB used
+pair 93.17 61.76 81.28 49.45 
+done 2026-10-18T06:24:47+00:00
+vram at release: 10 MiB
+release http=200 body={"ok":true}

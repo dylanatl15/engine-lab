@@ -1,0 +1,14 @@
+start 2026-10-18T06:07:47+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15778}lease 565 granted 2026-10-18T06:07:49+00:00
+vram free check: 10 MiB used
+| model                          |       size |     params | backend    | ngl | n_ubatch |  fa |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | -------: | --: | --------------: | -------------------: |
+       64 |   0 |            tg32 |         28.18 ± 0.00 |
+       64 |   0 |       tg32 @ d8 |         16.72 ± 0.00 |
+       64 |   0 |      tg32 @ d16 |         28.21 ± 0.00 |
+       64 |   0 |      tg32 @ d24 |         16.64 ± 0.00 |
+
+build: 547208d (1)
+done 2026-10-18T06:08:06+00:00
+vram at release: 10 MiB
+release http=200 body={"ok":true}

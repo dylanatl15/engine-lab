@@ -1,0 +1,6 @@
+tools/
+src/
+trace/routing.bin
+*.err
+*.bin
+*.gguf

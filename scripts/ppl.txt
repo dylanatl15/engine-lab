@@ -1,0 +1,515 @@
+# Engineering an Autonomous High-Frequency Cryptocurrency Reinforcement Learning Trading Agent
+
+## Introduction and Strategic Objectives
+The application of deep reinforcement learning (DRL) to high-frequency cryptocurrency trading represents a profound shift from traditional predictive modeling to prescriptive, policy-based decision-making. Supervised learning architectures typically attempt to forecast discrete future price trajectories, a methodology inherently flawed by the non-stationary, highly noisy, and adversarial nature of digital asset markets. Reinforcement learning bypasses this limitation by formulating trading as a Markov Decision Process (MDP), wherein an autonomous agent learns to map complex, high-dimensional market states directly to optimal execution actions by maximizing a carefully engineered cumulative reward signal over time.
+
+This research report provides an exhaustive, component-level blueprint for designing, training, and deploying a highly aggressive, profit-maximizing DRL trading agent. The specific objective of this agent is to substantially outperform the passive, benchmark "buy-and-hold" strategy across a ten-year historical dataset of minute-to-minute (1m) cryptocurrency price action. Unlike conventional algorithmic trading systems that prioritize strict risk aversion and capital preservation above all else, this architecture is explicitly designed to maximize absolute returns, accepting calculated drawdowns as an inherent operational cost of aggressive profit-seeking behavior.
+
+The system architecture is rigorously constrained and optimized for a localized server environment featuring specific hardware capabilities verified via system diagnostics: a 28-thread Intel Xeon E5-2680 v4 CPU operating at 2.40GHz (14 physical cores), 64 GB of system RAM, and an NVIDIA GeForce RTX 3080 GPU equipped with 10240 MiB (10 GB) of VRAM. The host operating system is Windows running a Microsoft Hypervisor, necessitating a robust virtualization layer to interface with modern machine learning ecosystems. To ensure seamless translation from theoretical design to programmatic execution by a secondary coding agent, this document meticulously details the logic, libraries, mathematical formulations, and infrastructural configurations required for every phase of the pipeline—from memory-mapped data ingestion and advanced signal processing to dynamic reward engineering, early stopping mechanisms, and high-performance visualization.
+
+## Infrastructure Provisioning and Virtualization Architecture
+Deploying advanced deep learning frameworks on a native Windows host presents severe compatibility and performance bottlenecks. Major machine learning libraries, particularly TensorFlow and PyTorch, have increasingly deprecated native Windows GPU support for their most advanced compilation features, favoring Linux environments. Consequently, the foundational infrastructure must leverage the Windows Subsystem for Linux 2 (WSL2), which provides a lightweight, highly integrated hypervisor running a native Linux kernel.
+
+### Advanced WSL2 and Resource Allocation
+While WSL2 eliminates the need for dual-booting and provides native Linux compatibility, it introduces dynamic memory and process scheduling complexities that can cripple high-frequency data processing if left unconfigured. By default, the Windows host allocates variable amounts of RAM and CPU cycles to the WSL2 virtual machine based on host demand. During the ingestion of a massive dataset (e.g., 10 years of minute-level data), this dynamic allocation frequently triggers catastrophic out-of-memory (OOM) faults or arbitrary process termination by the Linux OOM killer.
+
+To stabilize the environment, a dedicated `.wslconfig` file must be instantiated in the Windows user directory to enforce rigid resource boundaries. Given the 64 GB of total system RAM and the 28 available CPU threads (identified via the Intel Xeon E5-2680 v4 architecture), the optimal configuration dedicates the majority of resources to the Linux kernel while preserving sufficient capacity for the Windows host to manage display rendering and background telemetry.
+
+```ini
+[wsl2]
+memory=48GB
+processors=24
+swap=16GB
+localhostforwarding=true
+networkingMode=bridged
+vmSwitch=WSL_external
+```
+
+This configuration securely partitions 48 GB of RAM and 24 threads to the training environment. Furthermore, establishing a bridged networking mode via a Hyper-V virtual switch (`WSL_external`) ensures the WSL2 instance operates as an independent node on the local network. This eliminates the complex and often fragile port-forwarding configurations typically required to expose Jupyter servers, monitoring dashboards (such as Weights & Biases or TensorBoard), and SSH endpoints from the virtualized container to the host or external clients.
+
+### GPU Hardware Acceleration and CUDA Optimization
+The NVIDIA GeForce RTX 3080, verified to be running driver version 581.29 and CUDA version 13.0, is the primary computational engine for the deep learning policy networks. A critical performance degradation vector in WSL2 arises from the overhead associated with launching GPU processes across the hypervisor boundary. In native Linux distributions, CUDA packet scheduling executes with minimal latency. Conversely, WSL2 requires an operating system-level call for each GPU submission, which compounds dramatically during reinforcement learning, where the system constantly alternates between CPU-bound environment simulation and GPU-bound network inference.
+
+To mitigate this virtualization latency, Hardware-Accelerated GPU Scheduling (HAGS) must be explicitly enabled within the Windows host graphics settings. HAGS offloads high-frequency memory management and task scheduling from the CPU directly to the GPU's dedicated hardware scheduler. This paradigm mirrors the submission strategy utilized in native Linux environments, effectively bypassing the hypervisor overhead and allowing the RTX 3080 to maintain high utilization rates during the iterative training loop. Furthermore, researchers must be aware that the Windows Display Driver Model (WDDM) inherently reserves a portion of VRAM for desktop rendering and host UI processes (the diagnostic output shows an active Xwayland process utilizing 419 MiB of VRAM). Therefore, the programmatic architecture must assume a strict upper bound of approximately 8.5 GB to 9.0 GB of available VRAM when calculating maximum batch sizes and sequence lengths to prevent CUDA out-of-memory exceptions during backpropagation.
+
+## High-Performance Data Engineering and Memory Mapping
+The scope of the training regime requires processing the previous 10 years of minute-to-minute (1m) cryptocurrency price data. A single asset trading 24 hours a day, 365 days a year over a decade generates approximately 5.25 million discrete periods. When expanded to include basic Open, High, Low, Close, and Volume (OHLCV) metrics, alongside 30 to 40 engineered technical indicators, the raw dataset dimensions become formidable.
+
+### The Fallacy of Pandas and the Transition to Polars
+Traditional data science pipelines heavily rely on the Pandas library for data manipulation. However, Pandas structures data in contiguous memory blocks and routinely executes operations by creating complete intermediate copies of the DataFrame. Loading a 5.25 million row dataset with 40 `float64` columns inherently consumes roughly 1.6 GB of RAM. Yet, executing a complex rolling window calculation or a data transformation in Pandas can temporarily inflate this memory footprint to over 15 GB due to poor memory management algorithms. In a multi-processing environment where multiple agents require concurrent access to the data, Pandas becomes a critical bottleneck.
+
+The data processing pipeline must instead utilize Polars, a highly optimized DataFrame library implemented in Rust. Polars utilizes the Apache Arrow memory format and supports lazy evaluation. Lazy evaluation allows the library to construct a logical query plan and optimize the execution graph before processing any data, operating entirely out-of-core by chunking the dataset. This guarantees that the memory footprint remains stable and well within the 48 GB WSL2 constraint, regardless of the complexity of the feature engineering transformations applied to the decade-long dataset. Additionally, Polars natively utilizes the 24 allocated CPU threads to parallelize row-wise mathematical operations, drastically reducing preprocessing time. To further optimize memory, all numerical arrays must be systematically downcast from standard `float64` to `float32`. Deep learning models, particularly those operating on consumer-grade hardware like the RTX 3080, are heavily optimized for 32-bit floating-point operations. Retaining 64-bit precision doubles the RAM requirements and halves the memory bandwidth efficiency without yielding any measurable improvement in predictive accuracy.
+
+### Memory-Mapped PyTorch DataLoaders
+The most critical data engineering challenge occurs during the reinforcement learning training loop, where the agent must repeatedly sample randomized, sequential trajectories (context windows) from the 5.25 million row dataset. If the environment vectorization strategy spawns 24 parallel worker processes (one for each CPU thread), and each process attempts to load a distinct copy of the dataset into memory, the system will instantly exceed the 48 GB limit, triggering a hard crash.
+
+The definitive solution to this multi-processing memory bottleneck is the implementation of memory-mapped arrays via `numpy.memmap`. A memory-mapped file utilizes the operating system's virtual memory subsystem to map a large file stored on disk directly into the address space of the application. When a PyTorch DataLoader or a Gymnasium environment requests a specific slice of the historical data (e.g., a 1440-minute context window), the operating system dynamically loads only those specific bytes from the solid-state drive into RAM via page faults.
+
+Crucially, because the memory map is an operating system-level abstraction, multiple independent Python processes can read from the exact same file descriptor simultaneously without duplicating the data in memory. This allows 24 parallel environment workers to access the entire 10-year dataset concurrently while maintaining a total RAM footprint nearly identical to a single process. To maximize throughput, the training pipeline must implement a custom PyTorch `BatchSampler` that requests contiguous sequences of data, minimizing random disk seek operations and ensuring the RTX 3080 is continuously fed with micro-batches of sequential state representations.
+
+## Advanced Signal Processing and State Space Formulation
+Raw cryptocurrency OHLCV data is notoriously hostile to machine learning algorithms. It is highly non-stationary, characterized by shifting distributions, heteroskedasticity, and a distinct lack of structural consistency. Furthermore, cryptocurrency microstructure is dominated by high-frequency market makers, arbitrage bots, and transient liquidity shocks, creating an exceptionally low signal-to-noise ratio. Feeding raw price data directly into a neural network guarantees that the reinforcement learning agent will overfit to localized micro-noise rather than discovering generalized, exploitable market dynamics.
+
+To construct an observation space that empowers the agent to identify actionable patterns, the data pipeline must subject the raw time series to rigorous digital signal processing and advanced technical indicator generation. The goal is to provide the agent with a multi-dimensional representation of momentum, volatility, and underlying structural regimes.
+
+### Discrete Wavelet Transforms for Micro-Noise Denoising
+Traditional moving averages (such as the Simple Moving Average or Exponential Moving Average) are frequently utilized to smooth price data. However, they suffer from inherent mathematical lag; by the time a moving average reflects a structural reversal, the optimal entry point has already passed. To achieve zero-lag denoising, the architecture must implement the Discrete Wavelet Transform (DWT) via the `PyWavelets` library.
+
+Unlike Fourier transforms, which analyze signals purely in the frequency domain and lose all temporal context, wavelet transforms analyze signals simultaneously in both the time and frequency domains. By decomposing the price action into a series of approximate (low-frequency trend) and detailed (high-frequency noise) coefficients, the system can isolate the true market signal. The preprocessing pipeline applies soft thresholding to the detailed coefficients, mathematically nullifying the erratic, minute-to-minute price jitter caused by algorithmic spoofing, before executing an inverse wavelet transform. The resulting time series provides the RL agent with an exceptionally clean, responsive representation of the underlying asset trajectory, free from the lag associated with traditional smoothing techniques.
+
+### Hilbert Transforms for Market Regime Classification
+The most persistent failure mode for autonomous trading systems is the inability to autonomously differentiate between a trending market and a cyclical (ranging) market. Trend-following algorithms generate massive profits during secular bull markets but bleed capital continuously through false breakouts during sideways consolidation. Conversely, mean-reversion algorithms excel in ranging markets but suffer catastrophic drawdowns when a strong trend breaks the established support or resistance levels.
+
+To resolve this, the state space must integrate the Hilbert Transform, executed via the optimized TA-Lib framework. The Hilbert Transform converts the real-valued price sequence into an analytic signal, enabling the isolation of instantaneous phase and amplitude. Utilizing specific TA-Lib functions such as `HT_DCPHASE` (Dominant Cycle Phase) and `HT_TRENDMODE` (Trend vs. Cycle Mode), the pipeline generates a continuous, boolean-like signal that categorically dictates the current macroeconomic regime. By feeding this regime classification directly into the neural network, the RL policy can dynamically route its decision-making logic: deploying aggressive trend-following actions when `HT_TRENDMODE` indicates a trend, and switching to defensive or scalping actions when the market enters a cyclical phase.
+
+### Standard and Derivative Technical Ensembles
+While advanced signal processing forms the foundation of the state space, traditional technical indicators provide necessary context regarding bounded momentum and liquidity flows. The observation matrix must be enriched with the following computed features:
+
+| Feature Category | Specific Indicators | RL State Space Utility |
+| :--- | :--- | :--- |
+| **Momentum & Trend** | Relative Strength Index (RSI), MACD, Triple Exponential Moving Average (TEMA) | TEMA reduces lag relative to standard EMAs. RSI bounds momentum on a 0-100 scale, aiding neural network normalization. |
+| **Volatility Normalization** | Average True Range (ATR), Bollinger Bands | ATR quantifies the absolute amplitude of recent price movements, allowing the agent to gauge whether current volatility warrants action. |
+| **Liquidity & Flow** | On-Balance Volume (OBV), Chaikin Money Flow (CMF) | Validates price breakouts. A price surge unaccompanied by institutional volume expansion (measured by OBV) is often a false signal. |
+| **Mathematical Transformations** | Logarithmic Returns, Fractional Differencing | Ensures the input data achieves stationarity, a prerequisite for stable neural network gradient descent. |
+
+Prior to ingestion by the neural network, the entire feature matrix must undergo strict normalization. Standard z-score standardization must be applied using rolling windows rather than global parameters. Normalizing data using the global mean and variance of a 10-year dataset introduces severe look-ahead bias, as the agent receives normalized values influenced by future price action that has not yet occurred chronologically. Rolling window standardization guarantees strict causal temporal alignment.
+
+## Neural Network Architecture and Context Window Optimization
+The original specification mandates the utilization of an optimal context window ranging from a few hours to a full trading day. Processing minute-to-minute data requires a context window spanning between 120 and 1440 sequential timesteps. The architectural design of the policy and value networks must effectively capture these long-range temporal dependencies while remaining strictly within the effective VRAM limit of the RTX 3080 GPU.
+
+### The Limitations of Transformer Architectures
+Transformers have revolutionized natural language processing and demonstrate profound capabilities in analyzing complex sequences. Consequently, there is an intuitive drive to deploy them for financial time-series forecasting. However, the core mechanism of the Transformer—the self-attention matrix—suffers from a fatal flaw in high-frequency algorithmic trading contexts: its memory complexity scales quadratically with the sequence length, denoted as O(N^2).
+
+The memory required to store the intermediate activations for a single Transformer layer can be roughly approximated by the formula:
+Memory = Batch_Size * Seq_Len * Hidden_Dim * (34 + (5 * Seq_Len) / Num_Heads)
+
+For a maximum specified sequence length of 1440 minutes, a relatively modest hidden dimension of 256, and a standard RL batch size of 256 or 512, the squared term causes the VRAM requirements to explode logarithmically. A multi-layer Transformer under these parameters will instantaneously exceed the 10 GB limit of the RTX 3080 during the backward pass (backpropagation), triggering a hard CUDA OOM exception.
+
+While techniques such as Activation Checkpointing—which discards intermediate forward-pass activations and recomputes them dynamically during the backward pass—can reduce memory consumption, they impose a severe computational penalty, increasing overall training time by over 30%. Furthermore, empirical literature investigating high-frequency limit order book and OHLCV data indicates that while Transformers excel at predicting absolute price levels, they offer only marginal, if any, advantages over recurrent architectures when modeling differential sequences (such as price momentum and log returns), which are the primary drivers of trading strategies.
+
+### The CNN-LSTM Hybrid Architecture
+Given the computational constraints and the empirical evidence, the optimal neural architecture for this specific hardware and data configuration is a hybrid Convolutional Neural Network combined with a Long Short-Term Memory network (CNN-LSTM). LSTMs process sequential data iteratively, maintaining a memory state that scales linearly O(N) with the sequence length, circumventing the quadratic memory explosion of attention mechanisms.
+
+The architecture operates in a hierarchical manner:
+* **Temporal Convolutional Network (TCN) Layers:** The 1440-timestep input matrix is first processed by a series of 1D Convolutional layers. These layers act as automated feature extractors, striding across the data to identify localized micro-patterns, such as rapid volume spikes or sharp momentary support rejections. The convolutional pooling layers compress the sequence length significantly before passing it to the recurrent layers, further optimizing memory usage.
+* **Long Short-Term Memory (LSTM) Layers:** The compressed sequence of spatial features is ingested by a multi-layer LSTM. The LSTM utilizes its gating mechanisms (forget, input, and output gates) to retain long-term macroeconomic context (e.g., the overarching trend of the day) while selectively forgetting irrelevant localized noise.
+* **Fully Connected Actor-Critic Heads:** The final hidden state of the LSTM is routed into two separate Multi-Layer Perceptrons (MLPs). The Actor head outputs a probability distribution over the discrete action space (the trading policy), while the Critic head outputs a scalar value representing the expected cumulative reward from the current state (the value function).
+
+This CNN-LSTM hybrid delivers the long-range dependency modeling required for a 24-hour context window, excels at processing differential financial data, and easily fits within the strict 10 GB VRAM boundary, even when utilizing large batch sizes to ensure stable policy gradient updates.
+
+## Simulating Market Microstructure in the Gymnasium Environment
+Deep reinforcement learning models are entirely reliant on the fidelity of the simulated environment in which they are trained. A pervasive and catastrophic flaw in amateur financial machine learning is the assumption of a frictionless environment, where trades are executed instantaneously at the exact closing price of the candlestick. Agents trained in frictionless environments develop hyperactive, oscillating strategies that appear to generate massive profits in backtesting but rapidly destroy capital in live deployment due to cumulative transaction costs. To bridge this "sim-to-real" gap, the historical data must be encapsulated within a robust environment adhering to the standard Gymnasium API, explicitly programmed to simulate harsh market microstructure realities.
+
+### Microstructure Friction and Action Spaces
+The trading environment must implement a strict accounting framework that penalizes every transaction:
+* **Commissions:** Cryptocurrency exchanges universally charge percentage-based taker fees for market orders. The environment must deduct a fixed percentage (e.g., 0.1% or 0.12%) from the portfolio equity on every executed buy and sell action.
+* **Bid-Ask Spread and Slippage:** High-frequency trading inherently suffers from slippage—the difference between the expected price of a trade and the price at which the trade is executed due to order book depth. The environment simulates this by artificially widening the execution price. When the agent issues a buy command, the execution price is shifted slightly above the observed closing price; when issuing a sell command, it is shifted slightly below. This shift can be dynamically calculated as a fraction of the current Average True Range (ATR) to reflect higher slippage during periods of extreme volatility.
+
+The action space defines how the agent interacts with the market. While continuous action spaces allow an agent to specify the exact percentage of capital to allocate (e.g., buying with 43% of available funds), they exponentially increase the dimensionality of the exploration space, drastically slowing convergence. For optimal efficiency, the environment will enforce a discrete action space of size 3: `-1 (Sell), 0 (Hold), 1 (Buy)`. This discrete framework accelerates learning and mimics the binary decision-making required to capture rapid macroeconomic swings.
+
+### Parallelization via Vectorized Environments
+On-policy RL algorithms like Proximal Policy Optimization (PPO) require vast amounts of environment interaction to gather statistically significant trajectories before executing a network update. Because the CNN-LSTM forward pass occurs on the GPU, the actual step-by-step simulation of the trading environment becomes severely CPU-bound. To saturate the hardware and minimize training time, the environment must be aggressively parallelized.
+
+The Stable Baselines3 library provides two primary vectorization wrappers: `DummyVecEnv` and `SubprocVecEnv`. The `DummyVecEnv` executes environments sequentially on a single thread, offering zero parallelization benefits and bottlenecking the entire system. Conversely, the `SubprocVecEnv` utilizes Python's `multiprocessing` module to spawn independent processes, allocating each environment to a distinct CPU core.
+
+The diagnostic image confirms the Intel Xeon E5-2680 v4 CPU provides 14 physical cores and 28 logical threads. To maximize throughput without causing thread contention with the Windows host OS, the architecture should instantiate 24 parallel trading environments wrapped in a `SubprocVecEnv`. Because the underlying dataset is hosted in a `numpy.memmap`, these 24 distinct processes can seamlessly read from the same file descriptor simultaneously, completely parallelizing trajectory collection while maintaining an extraordinarily low RAM profile.
+
+## Aggressive Reward Function Engineering for Alpha Generation
+The reward function is the sole mechanism by which the reinforcement learning agent understands its objective. It translates abstract financial goals into scalar signals that drive gradient descent. The operational parameters explicitly mandate that the agent must learn to make "the biggest profit possible, avoiding the safe 'buy and hold' strategy," accepting losses as an inherent part of the process.
+
+This requirement necessitates a radical departure from conventional RL trading models that utilize highly risk-averse, symmetric metrics like the Sharpe Ratio or raw, unadjusted Profit and Loss (PnL). Optimizing purely for raw PnL frequently leads to a degenerate policy where the agent learns to simply buy the asset at the beginning of the episode and hold it until the end, mirroring the underlying asset's macro trend but failing to generate any algorithmic edge. Alternatively, optimizing for the Sharpe Ratio excessively penalizes the explosive upside volatility necessary to generate massive absolute returns. To achieve aggressive, benchmark-beating performance, the reward function must be a composite formulation of Active Return, Adaptive Risk Control, and Temporal Coherence.
+
+### 1. Active Return (Alpha Generation)
+To explicitly prevent the agent from adopting a passive buy-and-hold strategy, the foundational layer of the reward function must evaluate performance strictly in relative terms. The agent is not rewarded merely for achieving a positive return if the broader market also achieved a positive return. The reward is formulated around the concept of Active Return (or Alpha), defined as the differential between the agent's portfolio return and the return of a passive baseline index over the identical time horizon.
+
+Reward_Active(t) = Return_Agent(t) - Return_Benchmark(t)
+
+If the cryptocurrency asset surges by 8% over a specific window, and the agent's trading strategy yields a 5% return, the Active Return is mathematically negative. The neural network receives a punitive gradient update despite the absolute profit, forcing it to recognize that its execution timing was sub-optimal relative to simply holding the asset. This mechanism guarantees that the agent only receives positive reinforcement when its active decisions mathematically outpace passive market drift.
+
+### 2. Adaptive Risk Control Penalty
+While the objective is maximum profit, operating without any risk constraints in the highly volatile cryptocurrency market guarantees eventual liquidation during systemic crashes (e.g., flash crashes or macro bear regimes). However, static risk penalties stifle aggressive trading during euphoric bull markets.
+
+To balance these extremes, the reward function integrates an Adaptive Risk Control mechanism. This formulation dynamically adjusts the severity of risk penalties based on the prevailing macro volatility.
+
+R_Adaptive(t) = PnL(t) - [Delta(t) * Volatility(PnL_trailing)]
+
+The critical parameter is Delta(t), a dynamic risk aversion coefficient that scales automatically based on a longer-term volatility metric, such as the 20-day rolling variance. 
+
+During periods of extreme market turbulence, Delta(t) scales upward to its maximum limit, imposing severe penalties on erratic, volatile trading sequences. This forces the agent to learn the value of the 'Hold' action (remaining in cash) to weather the storm. Conversely, during stable, trending market regimes, Delta(t) collapses to its minimum threshold. This effectively removes the risk penalty, permitting the agent to deploy highly aggressive, profit-maximizing strategies to capture maximum upside without artificial algorithmic suppression.
+
+### 3. Temporal Coherence and Churn Mitigation
+High-frequency agents utilizing discrete action spaces are highly susceptible to "action oscillation"—rapidly alternating between buy and sell states in response to minor price ticks. This behavior generates massive commission fees, resulting in a phenomenon where the agent bleeds capital to death by a thousand cuts.
+
+To enforce strategic stability, the reward architecture includes a Temporal Coherence modifier. This function applies a small, positive scalar bonus whenever the agent's action at current timestep matches its previous action.
+
+R_Coherence(t) = PnL(t) + [Beta * Indicator(Action_t == Action_t-1)]
+
+By combining this coherence bonus with the explicit commission deductions incurred on execution, the mathematical landscape of the MDP dictates that altering a position is inherently expensive. The agent rapidly learns to ignore minor noise fluctuations and hold positions with conviction until a statistically significant reversal signal is processed.
+
+### 4. Asymmetric Downside Risk Metrics (Sortino and Omega Ratios)
+At the conclusion of a training episode, the entire sequence of actions must be evaluated using risk-adjusted performance metrics. The industry-standard Sharpe Ratio is fundamentally misaligned with aggressive profit maximization because it penalizes all volatility equally; an explosive 20% gain in one minute degrades the Sharpe Ratio just as severely as a 20% flash crash.
+
+For optimal terminal reward calculation, the system employs the Sortino Ratio and the Omega Ratio. The Sortino Ratio differentiates harmful volatility from beneficial volatility by penalizing only the downside deviation of returns falling below a user-specified minimum acceptable return. The Omega Ratio provides an even more robust, non-parametric evaluation by comparing the probability-weighted ratio of gains versus losses relative to a specific threshold. Optimizing toward these metrics ensures the agent aggressively pursues massive, asymmetric upside breakouts while maintaining a strict mathematical floor against catastrophic drawdowns.
+
+## Proximal Policy Optimization and Training Dynamics
+The complexity of the continuous state space, combined with the discrete action space and the multi-objective composite reward function, necessitates the deployment of a robust policy gradient algorithm. Value-based methods like Deep Q-Networks (DQN) often struggle to converge in highly stochastic financial environments due to Q-value overestimation and instability. The designated framework utilizes Proximal Policy Optimization (PPO), implemented via the Stable Baselines3 library.
+
+PPO is an actor-critic architecture that fundamentally stabilizes the training process by constraining the magnitude of policy updates. It achieves this through a clipped surrogate objective function:
+
+L_CLIP(theta) = E_t [ min(r_t(theta)*A_t, clip(r_t(theta), 1 - epsilon, 1 + epsilon)*A_t) ]
+
+Here, r_t(theta) is the probability ratio between the new and old policy, A_t is the estimated advantage (how much better an action was than expected), and epsilon is the clipping hyperparameter. By mathematically bounding the extent to which network weights can shift in a single update step, PPO prevents the neural network from "falling off a cliff"—a common occurrence where a single highly anomalous market event causes a massive gradient update that destroys the agent's previously learned, generalized trading logic.
+
+### Averting Exploitation and Q-Value Collapse
+Reinforcement learning agents are infamous for reward hacking—discovering and exploiting microscopic mathematical flaws in the environment simulation rather than solving the intended problem. In financial simulations, if the spread deduction logic or margin constraints contain a floating-point error, the agent will learn to execute million-trade arbitrage loops, generating infinite theoretical profit. This manifests during training as a "Q-value explosion" (or advantage explosion), where the loss function diverges to infinity, resulting in NaN weight values and catastrophic model failure.
+
+To preemptively neutralize these failure modes, the training architecture must enforce strict algorithmic guardrails:
+* **Gradient Clipping:** Implementing a global `max_norm` constraint on the network gradients limits the maximum impact of any single backpropagation step, containing explosive loss values.
+* **Huber Loss Configuration:** Utilizing Huber Loss for the critic network's value estimation function provides robustness against massive outlier rewards. Unlike Mean Squared Error (MSE), which squares errors and amplifies anomalies, Huber Loss transitions to a linear penalty for large errors, preventing the critic network from being destabilized by extreme flash crashes or localized hyper-volatility.
+
+### Dynamic Early Stopping and Validation Guardrails
+A defining characteristic of deep neural networks operating on historical financial data is an extreme propensity for overfitting. If permitted to train indefinitely, the agent will transition from learning generalized market physics to memorizing the precise chronological sequence of historical price movements. The agent will execute trades perfectly on the 2017 training data but will fail spectacularly on unseen data because it learned when events happened rather than why they happened.
+
+To enforce generalization and abort non-viable hyperparameter configurations, the training loop incorporates an aggressive, validation-based Early Stopping mechanism utilizing the `EvalCallback` functionality.
+* **Chronological Data Splitting:** The 10-year dataset is rigidly partitioned, withholding a distinct, chronologically contiguous out-of-sample period (e.g., the final 1.5 years) strictly for validation. Random sampling or cross-validation is strictly prohibited, as shuffling time-series data destroys autocorrelation and allows future information to leak into the training set.
+* **Deterministic Checkpointing:** At defined intervals (e.g., every 50,000 timesteps), the training pauses. The agent's current policy is deployed against the unseen validation dataset in deterministic mode (executing the highest probability action without any exploratory stochastic noise).
+* **Active Return Thresholding:** The callback calculates the validation portfolio's Sortino Ratio and its Active Return against the passive buy-and-hold benchmark.
+* **Abort Criteria:** If the validation metrics fail to demonstrate marginal improvement over a predefined patience threshold (e.g., 50 consecutive evaluations), the early stopping trigger engages, halting training to preserve the optimal model weights and prevent further overfitting. Furthermore, if the agent persistently registers negative Active Returns early in the training lifecycle, the system programmatically aborts the entire run, preventing the wastage of compute resources on fundamentally flawed hyperparameter configurations.
+
+## High-Performance Visualization and Diagnostics
+The final operational requirement is the generation of a comprehensive visual output charting the performance of the DRL agent against the passive buy-and-hold strategy across the entire training and testing horizon. Attempting to render a chart containing 5.25 million discrete data points alongside complex algorithmic execution markers using standard Python plotting libraries like Matplotlib or Seaborn is futile; the libraries will exhaust system memory and crash, or render entirely unresponsive static images.
+
+To achieve enterprise-grade visualization, the evaluation pipeline utilizes `lightweight-charts-python`, a high-performance Python wrapper for TradingView's Lightweight Charts library. Built upon an HTML5 Canvas backend, Lightweight Charts employs sophisticated data decimation and hardware acceleration algorithms to render millions of candlesticks seamlessly. It produces a fully interactive HTML output, allowing the user to zoom, pan, and scrutinize micro-level execution decisions across the ten-year timespan without encountering rendering latency.
+
+The diagnostic output comprises a multi-pane synchronized interface:
+* **Macro Equity Curve Comparison:** The primary pane plots a line chart comparing the normalized percentage return of the DRL agent's portfolio against the normalized percentage return of the underlying asset (the buy-and-hold baseline). This visualization instantly quantifies the cumulative Active Return. During severe macro market crashes, the effectiveness of the Adaptive Risk Control reward is visually validated; the benchmark line will plummet, while the trained agent's equity curve should flatline, indicating the policy successfully recognized the hostile regime, liquidated its holdings, and retreated to cash.
+* **Micro Execution and Price Action:** The secondary pane displays the asset's OHLCV candlesticks overlaid with precise execution markers (e.g., distinct glyphs representing buy and sell actions). This pane allows operators to audit the agent's behavior at the microstructure level, verifying that executions align with logical technical setups and confirming that the Temporal Coherence reward successfully eliminated rapid, oscillating churn.
+
+## Deployment Risks and Preventative Architecture
+Transitioning a deep reinforcement learning trading agent from a simulated historical backtest to live market execution introduces severe risk vectors. The discrepancy between historical simulation and live execution—the sim-to-real gap—can rapidly erode algorithmic alpha if not preemptively mitigated in the design phase.
+
+The most insidious threat is **Data Leakage and Look-Ahead Bias**. If the feature engineering pipeline utilizes functions that implicitly incorporate future knowledge—such as calculating a z-score standardization using the global mean of the entire 10-year dataset rather than a strict rolling mean—the agent will receive normalized state representations influenced by price action that has not yet occurred chronologically. The agent will appear to possess perfect predictive foresight in simulation but will fail instantly in live deployment. The architecture must strictly enforce causal temporal alignment, ensuring that at timestep t, no calculation relies on data from timestep t+1.
+
+Additionally, cryptocurrency markets are characterized by **Non-Stationarity and Regime Shifts**. The macroeconomic dynamics, liquidity profiles, and regulatory environments of 2026 differ fundamentally from those of 2018. An agent trained exclusively on historical data will eventually encounter unprecedented structural anomalies. To maintain efficacy and adapt to evolving market microstructures, the deployment architecture must support continuous online learning and periodic walk-forward optimization. Utilizing the established memory-mapped data ingestion pipeline, the system can efficiently append streaming, live market data to the localized dataset and execute periodic, low-learning-rate fine-tuning passes, allowing the PPO policy to continuously adapt to the shifting frontiers of the digital asset ecosystem.# Phone app, hub and web app: build plan
+
+Status: plan, 2026-10-02. Nothing here is built yet. This document is written so the build can
+proceed without re-deriving the decisions: each section says what to build, the choice made, and
+why. Where a later finding contradicts this plan, fix the plan in the same commit as the code.
+
+## 0. Decisions at a glance
+
+| Question | Decision | Why, in one line |
+|---|---|---|
+| Who builds what | Claude builds the Android app, the hub server and the web app | user, 2026-10-02 |
+| Language | Kotlin everywhere new: Android app, hub server, shared core | one codebase for the phone's local server and the remote hub; types shared |
+| Policy runtime | ONNX Runtime for Android, CPU, 1 thread | the same runtime `link/phone.py` was verified with |
+| Model shipping | an ONNX file plus a JSON bundle of every constant, read at runtime | swap models without a rebuild; no constants copied by hand |
+| Port target | `src/selfdrive/link/phone.py`, line for line | it already drives as well as the simulator (`docs/phone-loop.md`) |
+| Port check | golden vectors dumped from Python, replayed in Kotlin JVM tests | catches every porting bug before the car moves |
+| Manual control | PS4 DualShock 4 paired to the phone by Bluetooth, plus web joystick | no network in the safety path; the web is the second option |
+| Remote access | phone dials out to `wss://car.dylantamayo.dev` through the existing Cloudflare Tunnel | no port forwarding into WSL2; the phone is never addressed directly |
+| Offline backup | the phone always runs the same web app and API on its own port 8080 | a laptop on the phone's hotspot needs nothing else |
+| Video, online | H.264 from the phone's hardware encoder, sent over WebSocket, decoded with WebCodecs in the browser | WebRTC media needs UDP, which the tunnel does not carry |
+| Video, fallback | JPEG frames over the same socket | WebCodecs needs HTTPS; the offline page is plain HTTP |
+| Viewing / control | viewing public (switchable), controls need login | user, 2026-10-02 |
+| ESP32 protocol | v1 unchanged | everything new is phone ↔ web, not phone ↔ ESP32 |
+
+I first suggested WebRTC for video. It is dropped: WebRTC media needs UDP to the server, the
+server sits behind a Cloudflare Tunnel (HTTP and WebSocket only) inside WSL2's NAT, and the
+Android WebRTC library is the heaviest dependency the app would carry. H.264 over WebSocket costs
+about 0.2-0.5 s of latency, which is fine for watching and for setting goals. Driving by hand
+goes through the gamepad on the phone, so video latency never sits in a control loop. If remote
+video ever needs to be sub-200 ms, Cloudflare Realtime (a hosted WebRTC SFU) is the upgrade path.
+
+## 1. What exists and what this adds
+
+Already in the repo, and the build must follow it:
+
+- `docs/protocol.md`: serial frames, CRC8, the 200 ms failsafe. **Frozen.**
+- `docs/phone-loop.md`: the per-step order and every input formula. The master spec.
+- `docs/memory-ring.md`, `docs/goal-block.md`, `docs/shield.md`: the pieces, each with worked rules.
+- `src/selfdrive/link/phone.py`: the reference controller. `PhoneController.observe` then `act`.
+- `src/selfdrive/link/phone_check.py`: runs phone.py against the simulator (drive and shadow modes).
+- `src/selfdrive/export/to_onnx.py`: export. Input `observation` float32 `[batch, N]`, output
+  `action` `[batch, 2]` = `[steer, throttle]`, tanh already applied. Opset 17, single file.
+- Demo model: `runs/exports/waypoint_s2_patience_seed1_9500000.onnx` (120 inputs), run with the
+  shield and back-out of `configs/env_waypoint_demo.yaml`. `runs/` and `*.onnx` are gitignored.
+
+Not specified anywhere yet, and designed here:
+
+1. Turning an ARCore depth image into the 8 depth buckets (section 7.4). phone.py takes the
+   buckets as given.
+2. Everything outside the policy loop: modes, gamepad, remote control, video, hub, web app.
+
+Docs to update when the app lands: `README.md` and `CLAUDE.md` both say teammates build the
+Android app and that constants are "mirrored by hand". After this plan, the app reads them from
+the bundle.
+
+## 2. Architecture
+
+```
+                         Cloudflare (TLS)          your server (docker, WSL2)
+ browsers  ◄──── HTTPS / WSS ────►  tunnel  ◄────►  carhub  (Kotlin, Ktor)
+ (public view,                                       │  static web app, login,
+  logged-in control)                                 │  relay + fan-out
+                                                     ▲
+                                                     │ two outbound WSS sockets:
+                                                     │ /ws/car (control, state)
+                                                     │ /ws/car/video (video)
+ ┌───────────────────────── Galaxy S21 FE ───────────┴───────────────────────────┐
+ │ GL thread: ARCore update ─► pose history, depth image, camera image           │
+ │ depth worker: depth image ─► 8 buckets + fresh flags                          │
+ │ video worker: camera image ─► H.264 (MediaCodec) / JPEG                       │
+ │ serial thread: USB-CDC lines ─► latest $T                                     │
+ │ gamepad (DS4, Bluetooth) ─► input events                                      │
+ │ CONTROL THREAD, 30 Hz: snapshot ─► PhoneController (port of phone.py) ─►      │
+ │      policy + shield ─► mode arbiter ─► $C ─► USB                             │
+ │ local server :8080 (same web app, same API) for offline use                   │
+ └──────────────────────────────────────┬────────────────────────────────────────┘
+                                        │ USB-OTG, protocol v1, 115200 8N1
+                                      ESP32 ─► servo, motor; ultrasonics ─► $T
+```
+
+The **control thread** is the only writer of `$C`. Every other thread publishes its newest
+result into a snapshot the control thread reads. A stalled ARCore, network or encoder can make
+the control thread stop the car, but can never stop it from sending `$C`.
+
+## 3. Repository layout
+
+New top-level Gradle multi-project `car/`, next to the Python `src/`:
+
+```
+car/
+  settings.gradle.kts, build.gradle.kts, gradle/libs.versions.toml, gradlew
+  core/        JVM library, no Android imports
+               protocol/   CRC8, $C/$T codec
+               policy/     ObsBuilder, MemoryRing, GoalBlock, Patience, Shield, Unstick,
+                           SpeedEstimator, FloorPose, PhoneController, ModelBundle
+               control/    ModeArbiter, watchdogs, ManualInput
+               link/       carlink v1 message types (kotlinx.serialization), video framing
+  hub/         JVM library: the browser-facing API (Ktor routes, auth, lease, fan-out),
+               used by both the server and the phone's local server
+  server/      JVM application: Ktor main, the remote-car endpoint, Dockerfile
+  android/     the app: ARCore, depth, video, serial, gamepad, uplink, UI
+  web/         static web app (HTML, JS modules, CSS), no build step. Gradle copies it into
+               server resources and the APK's assets, so both serve the same files.
+```
+
+Python additions under `src/selfdrive/export/` and `src/selfdrive/link/` (section 5), with tests.
+
+Versions to pin in `libs.versions.toml` at setup (latest stable at that time): Kotlin 2.x,
+Android Gradle Plugin 8.x, Gradle 8.x, JDK 17 (already installed), compileSdk/targetSdk 35,
+minSdk 29 (one known phone, Android 14+). Libraries: `com.google.ar:core`,
+`com.microsoft.onnxruntime:onnxruntime-android` (and `onnxruntime` for JVM tests),
+`com.github.mik3y:usb-serial-for-android` (via JitPack), Ktor server (CIO engine on the phone,
+Netty or CIO on the server), Ktor client or OkHttp for the uplink, kotlinx.serialization,
+kotlinx.coroutines, JUnit 5.
+
+## 4. Toolchain and device setup
+
+1. **Android SDK in WSL2.** None is installed. Download the command-line tools into
+   `~/Android/Sdk`, then `sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"`
+   and accept the licences. Set `ANDROID_HOME`. Build with `./gradlew :android:assembleDebug`.
+2. **Installing on the phone: wireless debugging.** The phone's USB-C port belongs to the ESP32
+   once the phone is on the car, so wireless debugging is needed anyway. Phone: Developer
+   options → Wireless debugging → Pair with code. WSL2: `adb pair <ip>:<pair-port> <code>`,
+   then `adb connect <ip>:<port>`. WSL2's NAT allows outbound connections to the LAN, so this
+   works from WSL. The user does the pairing once.
+3. **Server.** Docker is running. The tunnel is the `cloudflared` service in
+   `/home/dylan/my-server/dylantamayo/docker-compose.yml` (not a git repo), started with a
+   token, so public hostnames live in the Cloudflare Zero Trust dashboard. **The user adds
+   `car.dylantamayo.dev` → `http://carhub:8080` there.** Check the zone's Rocket Loader is off
+   for that hostname; it rewrites script tags. (Email obfuscation is zone-wide but harmless here.)
+
+## 5. Python side: model bundle, golden vectors, log replay
+
+These change no published interface: the protocol and `ObsConfig` stay as they are.
+
+### 5.1 Model bundle exporter: `python -m selfdrive.export.bundle`
+
+```
+--onnx runs/exports/waypoint_s2_patience_seed1_9500000.onnx
+--env configs/env_waypoint_demo.yaml          # supplies the shield and goal sections
+--check-run runs/waypoint_s2_patience_seed1   # asserts obs section == the run's env_config.txt
+--out car/android/src/main/assets/models/demo
+```
+
+Writes `<name>.onnx` (copied) and `<name>.json`:
+
+```json
+{
+  "schema": 1,
+  "name": "waypoint_s2_patience_seed1_9500000",
+  "onnx_sha256": "...",
+  "obs_size": 120,
+  "dt": 0.0333,
+  "obs":   { "n_depth": 8, "n_ultrasonic": 4, "frame_stack": 4,
+             "norm_depth_max": 5.0, "norm_ultra_max": 4.0, "norm_speed_max": 1.5,
+             "norm_steer_max": 0.4887, "memory_sectors": 24, "memory_seconds": 3.0,
+             "norm_memory_max": 5.0, "goal_block": true, "norm_goal_max": 15.0,
+             "goal_patience": true, "norm_patience_max": 10.0, "patience_gain": 0.25 },
+  "depth": { "fov_deg": 69.0, "n_buckets": 8, "max_range": 5.0, "min_range": 0.15,
+             "mount_forward": 0.18, "speed_ref": 0.3 },
+  "ultrasonic": { "names": ["front","left","right","back"], "max_range": 4.0,
+                  "mounts": [[0.18,0.0],[0.0,0.1],[0.0,-0.1],[-0.18,0.0]],
+                  "angles_deg": [0,90,-90,180] },
+  "car":   { "max_steer_deg": 28.0, "max_speed_fwd": 1.5, "max_speed_rev": 0.6 },
+  "shield": { "enabled": true, "margin": 0.12, "horizon": 0.45, "floor": 0.05, "brake": 0.3,
+              "slack": 0.05, "unstick_after": 1.0, "unstick_for": 1.0,
+              "unstick_throttle": 0.5, "unstick_speed": 0.1 },
+  "goal":  { "radius": 0.5 }
+}
+```
+
+The values above are the demo config, read on 2026-10-02. Note that the demo shield is **not**
+`docs/shield.md`'s defaults (margin 0.12, not 0.15; horizon 0.45, not 0.5; floor 0.05, not 0).
+Take every constant from the bundle; never hard-code one in Kotlin. Mounts and names come from
+`UltrasonicArray(cfg.ultrasonic)`, the way phone.py builds them. Add a Python test that the
+exporter's output for the demo config has exactly these keys. The app refuses to load a bundle
+whose `obs_size` disagrees with the size computed from its `obs` block, or with the ONNX input.
+
+The ONNX and JSON are committed into `car/android/src/main/assets/models/` with a
+`!car/**/*.onnx` exception in `.gitignore`. It is 390 KB, and the app must build from a clean
+clone.
+
+### 5.2 Golden vectors: `phone_check --dump golden.jsonl`
+
+Add a `--dump PATH` option to `link/phone_check.py` (drive mode). Per control step, write one
+JSON line with **what the phone received** and **what it produced**:
+
+```
+in:  seed, step, start, now, dt, tline ($T line exactly as decoded, as a string),
+     depth {ranges[8], fresh[8], fov, stamp, pose{tx..qw,tracking}},
+     pose {tx,ty,tz,qx,qy,qz,qw,tracking}, pin [x,y,z] | null,
+     max_steer_deg, has_encoder
+out: obs[120], action_raw[2], sent[2], shield_did, cline ($C line as bytes→str)
+```
+
+Generate a few short episodes (for example 6 seeds × 300 steps: encoder on and off, a
+`max_steer_deg` other than 28, at least one tracking loss and one goal change, and back-out
+triggered). Commit the file to `car/core/src/test/resources/golden/` (gzipped, a few MB).
+`tests/test_phone.py` gains a check that the dump is reproducible.
+
+### 5.3 Device log replay: `python -m selfdrive.link.phone_replay LOG`
+
+The app writes the same per-step record to its own log (section 7.13). This tool feeds a phone
+log's inputs through Python's `PhoneController` and reports any step where the Kotlin `obs` or
+`$C` differs. Golden vectors prove the port on simulated inputs; this proves it on real ones,
+where timing, rounding and tracking behave differently.
+
+## 6. `core`: the port of phone.py
+
+Port class by class, keeping names recognisable: `ArPose.floorPose`, `DepthImage`,
+`PhoneController.observe/act`, `ObsBuilder.frame/reset/push/goal`, `EgoMemory.insert/ring`,
+`GoalPatience`, `shieldThrottle`, `reportedDistances`, `Unstick.step`. Read the Python source of
+each (`envs/obs.py`, `envs/memory.py`, `envs/goals.py`, `envs/shield.py`) while porting. The docs
+are summaries; the code is what the model trained on.
+
+Compute in `Double` and convert the final observation to `FloatArray`, as Python does in float64
+and casts at the end.
+
+### 6.1 Things that will bite
+
+1. **Float formatting in `$C`.** Python `f"{x:.2f}"` rounds the exact binary value half to even.
+   Java `String.format` rounds half up, and gives `0.13` where Python gives `0.12` for 0.125.
+   Use `BigDecimal(x).setScale(n, RoundingMode.HALF_EVEN).toPlainString()`. Python also keeps
+   the sign of a negative value that rounds to zero (`-0.001` → `-0.00`), and BigDecimal drops
+   it, so add the `-` back in that case. Always format with `Locale.ROOT` semantics: no comma
+   decimals. The golden `cline` comparison is byte-exact and catches all of this.
+2. **`-1.000` ultrasonic.** It reads as 4.0 (`ultrasonic.max_range`) in the observation **and**
+   the shield, but stays `-1.0` for the memory ring's "skip" rule and its "changed" comparison
+   (phone.py keeps `raw` and `ultra` apart).
+3. **"Changed" compares with the previous control step**, not the previous `$T` frame (phone.py
+   `_prev_raw`). At 30 Hz they are usually the same frame; follow the code.
+4. **Depth points use the capture pose; ultrasonic points use the current pose.** Depth confidence
+   is `min(|v| / speed_ref, 1)`, then `*2-1` in the builder.
+5. **Goal while tracking is lost:** computed from the last *tracked* pose, so it holds. The memory
+   ring is cleared and nothing is stored while not tracking. The speed estimate holds its last value.
+6. **No goal:** range `+inf`, which normalizes to `[1, 0, 1]`, plus the clock. The app never
+   drives AUTO without a goal (section 7.7), but the observation is still built.
+7. **Stack start:** on `start`, all four frames are the first frame and `sent` is zero.
+8. **Bucket order:** bucket 0 is the rightmost (most negative bearing). Sector 0 is straight ahead,
+   counter-clockwise. Steering positive is left. `$C` steer = `steer × max_steer_deg`.
+9. **3-sensor builds** pad the fourth slot with 4.0, after left/right/back. No model uses this yet.
+10. **`seq`** increments per `$C` and wraps at 65536.
+
+### 6.2 Splitting `act` for modes
+
+phone.py's `act` runs the policy, shields, and records `sent`. The app needs the policy's answer
+every step (to show "what the model would do") but sends it only in AUTO. Split into:
+
+- `observe(...)` → `obs` (unchanged from phone.py).
+- `proposal(obs)` → raw action, plus the shielded command, **without** advancing `Unstick`
+  (a pure computation, for display).
+- `actAuto(obs)` → the shielded command with `Unstick` advanced (exactly phone.py's `act`).
+- `commit(steerFrac, throttle)` → records what was really sent as next step's last commands,
+  and returns the `$C` frame.
+
+In AUTO, `actAuto` then `commit` must reproduce phone.py's `act` byte for byte; the golden tests
+run that path. `Unstick` is reset on every entry into AUTO.
+
+### 6.3 Tests in `core`
+
+- Protocol: the two example frames of `docs/protocol.md` byte for byte, CRC-8/ATM check value,
+  corrupted, short and wrong-type frames rejected (port `tests/test_protocol.py`).
+- Memory ring: the worked example table in `docs/memory-ring.md`.
+- Shield: port the cases of `tests/test_shield.py`.
+- Golden replay: every step's `obs` within 1e-5, `cline` byte-exact, `shield_did` equal. With the
+  ONNX Runtime JVM artifact, `action_raw` within 1e-5. Report the count of mismatching steps
+  per input group, as phone_check does. Expect zero.
+
+## 7. The Android app
+
+### 7.1 Threads
+
+| Thread | Does | Publishes |
+|---|---|---|
+| GL (GLSurfaceView renderer) | `session.update()`, draws the camera preview, records pose history, hands depth and camera images to workers | `PoseSnapshot` (pose, tracking, timestamp), pose history ring (last 1 s, keyed by frame timestamp) |
+| Depth worker | depth image → buckets (7.4) | `DepthSnapshot` (ranges, fresh, stamp, capture pose) |
+| Video worker | camera image → H.264 and/or JPEG (7.10) | frames to uplink and local server |
+| Serial reader | USB lines → `$T` decode, invalid frames dropped silently | latest `Telemetry` + receive time |
+| Main/UI | gamepad events, HUD, settings | `ManualInput` (steer, throttle, time) |
+| **Control** | 30 Hz step (7.6), the only `$C` writer | `ControlState` for HUD, uplink, log |
+| Network (coroutines) | uplink sockets, local Ktor server | inbound commands → a queue the control thread drains |
+
+Snapshots are immutable objects swapped through `AtomicReference`. The control thread runs on
+absolute deadlines (`deadline += 33_333_333 ns`; `LockSupport.parkNanos` until it); after an
+overrun it skips to the next deadline instead of bursting. Raise its priority with
+`Process.setThreadPriority(THREAD_PRIORITY_DISPLAY)`.
+
+### 7.2 ARCore setup
+
+- Check `ArCoreApk.getInstance().requestInstall` and the camera permission at start.
+- `CameraConfigFilter`: target 30 fps, `DepthSensorUsage.DO_NOT_USE` (the S21 FE has no ToF).
+  Among the matches, pick the CPU image size closest to 1280×720, else 640×480. Log the choice.
+- `Config`: `depthMode = AUTOMATIC` (check `isDepthModeSupported` first), `focusMode = FIXED`,
+  `updateMode = LATEST_CAMERA_IMAGE`, plane finding, light estimation and instant placement
+  all off.
+- Use `frame.camera.pose` (the physical camera), never `displayOrientedPose`.
+- The activity is landscape-locked and keeps the screen on. On `onPause` the session pauses,
+  and the control loop goes to STOPPED (7.7). It then stops sending `$C` on teardown, and the
+  ESP32's failsafe takes over.
+
+### 7.3 Pose and clocks
+
+- Floor pose: `x = tx - mount·cosθ`, `y = -tz - mount·sinθ`, with `θ = atan2(-fz, fx)` and
+  `fx = -2(qx·qz + qw·qy)`, `fz = -(1 - 2(qx² + qy²))` (phone.py `floor_pose`). `mount` is the
+  bundle's `depth.mount_forward` (placeholder 0.18 m, until measured).
+- **One clock:** the control loop's `now` is `SystemClock.elapsedRealtimeNanos()` in seconds.
+  ARCore frame and depth timestamps are camera sensor timestamps. On most phones they share
+  that time base. At startup, log `elapsedRealtimeNanos() - frame.timestamp` for 100 frames. If
+  it is a steady 0-50 ms, use timestamps directly; otherwise subtract the measured offset.
+  The memory ring's ages depend on this.
+- Pose history: keep `(timestamp, pose)` for the last 1 s. The depth worker looks up the pose
+  whose timestamp equals the depth image's, or the nearest one.
+
+### 7.4 Depth image → 8 buckets (new design)
+
+Input: `frame.acquireRawDepthImage16Bits()` (uint16 millimetres, 0 = no depth) and
+`frame.acquireRawDepthConfidenceImage()` (uint8). Raw depth, not the smoothed
+`acquireDepthImage16Bits`, because it reports invalid pixels honestly, and the simulator models
+exactly that (dropout, and `stationary_dropout` when the car stops). A raw image whose timestamp
+equals the previous one is not new. Copy both buffers and close the images on the GL thread;
+do the rest on the depth worker.
+
+Per new image, with the capture pose `P` (camera pose a

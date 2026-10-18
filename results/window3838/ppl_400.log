@@ -1,0 +1,12 @@
+0.01.597.672 W llama_model_loader: tensor overrides to CPU are used with mmap enabled - consider using --load-mode none for better performance
+1.12.929.878 W impl: MoE cache budget is too small for 1 layers, they are not cached
+1.13.039.507 I cmn          init: llama threadpool init, n_threads = 14
+1.17.910.941 I 
+1.17.911.206 I system_info: n_threads = 14 (n_threads_batch = 14) / 28 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+1.17.911.364 I perplexity: tokenizing the input ..
+1.18.632.853 I perplexity: tokenization took 721.48 ms
+1.18.632.901 I perplexity: calculating perplexity over 3 chunks, n_ctx=512, batch_size=1, n_seq=1
+2.48.877.941 I perplexity: 90.24 seconds per pass - ETA 4.50 minutes
+[1]8.4075,[2]7.1687,[3]6.1863,
+5.38.779.194 I Final estimate: PPL = 6.1863 +/- 0.54953
+

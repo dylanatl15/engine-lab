@@ -1,0 +1,21 @@
+start 2026-10-18T22:12:58+00:00 cache=9000 jobs=6
+lease 46 2026-10-18T22:12:58+00:00
+vram free check: 10 MiB
+mode 0 up 2026-10-18T22:13:05+00:00
+{"text": "A hash map handles collisions by using techniques like chaining or open addressing when two different keys produce the same hash index. In chaining, each bucket contains a linked list or tree of entries, allowing multiple values to coexist at the same index without overwriting each other. Open addressing, on the other hand, resolves collisions by probing for the next available empty slot
+{"text": "A hash map handles collisions by using techniques 
+1/2 24s pp_n=1559 tg_n=100 tg=14.1 total_decode=100
+2/2 14s pp_n=455 tg_n=100 tg=15.6 total_decode=200
+mem_info_vram_used 15333 MiB
+mem_info_gtt_used 962 MiB
+0.04.922.376 I llama_moe_cache: prefaulted 144 host weights in 0.3 s
+0.04.922.388 I llama_moe_cache: pinned upload staging = 369.80 MiB
+0.59.344.865 I llama_moe_cache: timing: 17468 copy calls, readback+sync 61.0 us/call, plan 19.0 us/call, upload-submit 234.5 us/call, 106734 upload calls
+0.59.344.873 I llama_moe_cache: big uploads: 117949 chunks, 93669.7 MiB, memcpy 5.20 s, submit 0.13 s, sync 3.76 s (486 syncs)
+0.59.344.879 I llama_moe_cache: decode(1 tok): 17094 calls, gap(gpu compute+cpu) 1070.4 us, readback+sync 60.3 us, upload 194.1 us (memcpy 183.9 us), 2.67 MiB/call
+0.59.344.882 I llama_moe_cache: ubatch <= 8: hits = 146189, misses = 30187, hit rate = 82.88%, uploaded = 50512.43 MiB
+0.59.344.884 I llama_moe_cache: ubatch  > 8: hits = 2288, misses = 5994, hit rate = 27.63%, uploaded = 10061.23 MiB
+0.59.344.885 I llama_moe_cache: large batches: 66114 experts copied from the cache, 36498.63 MiB
+done 2026-10-18T22:13:58+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

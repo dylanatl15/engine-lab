@@ -1,0 +1,12 @@
+start 2026-10-18T06:44:37+00:00
+{"error":"unauthorized"}{"ok":true,"degraded":null,"held":false,"busy":false,"queued":0,"vramUsedMB":15913}lease 3 granted 2026-10-18T06:44:45+00:00
+vram free check: 10 MiB used
+| qwen35 27B IQ4_XS - 4.25 bpw   |  13.26 GiB |    27.32 B | Vulkan     |  99 |      256 |   1 |            tg64 |         28.76 ± 0.00 |
+| qwen35 27B IQ4_XS - 4.25 bpw   |  13.26 GiB |    27.32 B | Vulkan     |  99 |      256 |   1 |   tg64 @ d31744 |         24.92 ± 0.00 |
+| qwen35 27B IQ4_XS - 4.25 bpw   |  13.26 GiB |    27.32 B | Vulkan     |  99 |      256 |   0 |            tg64 |         28.72 ± 0.00 |
+| qwen35 27B IQ4_XS - 4.25 bpw   |  13.26 GiB |    27.32 B | Vulkan     |  99 |      256 |   0 |   tg64 @ d31744 |         20.45 ± 0.00 |
+| qwen35 27B IQ4_XS - 4.25 bpw   |  13.26 GiB |    27.32 B | Vulkan     |  99 |      256 |   q8_0 |   q8_0 |   1 |            tg64 |         28.50 ± 0.00 |
+| qwen35 27B IQ4_XS - 4.25 bpw   |  13.26 GiB |    27.32 B | Vulkan     |  99 |      256 |   q8_0 |   q8_0 |   1 |   tg64 @ d31744 |         24.17 ± 0.00 |
+done 2026-10-18T06:54:04+00:00
+vram at release: 10 MiB
+release http=200 body={"ok":true}
