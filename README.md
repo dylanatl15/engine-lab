@@ -127,7 +127,7 @@ Then edit the model path in `run-flash-next.sh` and run it. The settings it uses
 | `--moe-cache-mib` | 8500 | the VRAM expert cache; stay ≤ 9000 at 64K |
 | `-fa on -ctk q8_0 -ctv q8_0` | | flash attention with a quantized KV cache |
 | `-c 65536 -ub 512` | | 64K context |
-| `ENGINE_LAB_CPY_THREADS` | 6 | copy-pool size |
+| `ENGINE_LAB_CPY_THREADS` | 12 | copy-pool size |
 | `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM` | 1 | avoids the placement bug above |
 
 Useful switches while debugging: `ENGINE_LAB_NO_PREFAULT`, `ENGINE_LAB_NO_BIGUP`,
@@ -155,7 +155,7 @@ These depend on your PCIe generation and host memory bandwidth, not on the GPU v
 
 | Knob | Default | Notes |
 |---|---|---|
-| `ENGINE_LAB_CPY_THREADS` | 3 (launcher uses 6) | Size of the memcpy pool. More threads help until you saturate DDR bandwidth. A dual-channel desktop will want fewer than a quad-channel workstation. |
+| `ENGINE_LAB_CPY_THREADS` | 12 | Size of the memcpy pool. More threads help until you saturate DDR bandwidth. A dual-channel desktop will want fewer than a quad-channel workstation. |
 | `big_half` (constant) | 96 MiB | Size of each half of the double-buffered prefill upload buffer. |
 | `chunk` (constant) | 128 KiB | Per-worker copy chunk. Copies of 256 KiB or less skip the pool. |
 | idle spin (`idle < 20000`) | about 20k pauses | How long workers spin before sleeping on the futex. Raise it for lower latency, lower it to save CPU. |

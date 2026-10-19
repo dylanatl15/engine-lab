@@ -1,0 +1,26 @@
+start 2026-10-18T23:47:38+00:00 cache=8500 jobs=2
+lease 59 2026-10-18T23:47:40+00:00
+vram free check: 10 MiB
+Total time: 9495.84 us.
+1.58.326.229 I llama_moe_cache: prefaulted 144 host weights in 0.3 s
+1.58.326.242 I llama_moe_cache: pinned upload staging = 369.80 MiB
+/home/dylan/AI/engine-lab/src/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp:14360: GGML_ASSERT(ctx->compute_ctx.expired()) failed
+/home/dylan/AI/engine-lab/src/build/bin/libggml-base.so.0(+0x17a66) [0x7c62266dfa66]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-base.so.0(+0x17eed) [0x7c62266dfeed]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-base.so.0(ggml_abort+0x166) [0x7c62266e00d6]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-vulkan.so.0(+0x151431) [0x7c6222351431]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-vulkan.so.0(+0x1531b5) [0x7c62223531b5]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-base.so.0(ggml_backend_sched_graph_compute_async+0x3d7) [0x7c62266fefd7]
+/home/dylan/AI/engine-lab/src/build/bin/libllama.so.0(_ZN13llama_context13graph_computeEP11ggml_cgraphb+0xdb) [0x7c6224e32d2b]
+/home/dylan/AI/engine-lab/src/build/bin/libllama.so.0(_ZN13llama_context14process_ubatchERK12llama_ubatch14llm_graph_typeP22llama_memory_context_iR11ggml_status+0x133) [0x7c6224e36c23]
+/home/dylan/AI/engine-lab/src/build/bin/libllama.so.0(_ZN13llama_context6decodeERK15llama_batch_ext+0x456) [0x7c6224e40116]
+/home/dylan/AI/engine-lab/src/build/bin/libllama-common.so.0(_Z23common_init_from_paramsR13common_paramsb+0x38f) [0x7c622547fd2f]
+/home/dylan/AI/engine-lab/src/build/bin/libllama-server-impl.so(_ZN19server_context_impl10load_modelER13common_params+0x5df) [0x7c62261a271f]
+/home/dylan/AI/engine-lab/src/build/bin/libllama-server-impl.so(_Z12llama_serverR13common_paramsiPPcR12server_child+0x3e8b) [0x7c62260d7bfb]
+/home/dylan/AI/engine-lab/src/build/bin/libllama-server-impl.so(_Z12llama_serveriPPc+0x1173) [0x7c62260d9fa3]
+/usr/lib/x86_64-linux-gnu/libc.so.6(+0x2a601) [0x7c622582a601]
+/usr/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x88) [0x7c622582a718]
+/home/dylan/AI/engine-lab/src/build/bin/llama-server(+0x1325) [0x6089185be325]
+done 2026-10-18T23:49:43+00:00
+vram at release: 10 MiB
+{"ok":true} http=200

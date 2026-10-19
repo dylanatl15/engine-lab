@@ -1,0 +1,26 @@
+start 2026-10-18T23:55:46+00:00 cache=0 jobs=1
+lease 61 2026-10-18T23:55:48+00:00
+vram free check: 10 MiB
+SSM_CONV_SILU SSM_CONV: 1 x 11.52 us = 11.52 us
+TOPK_MOE_EARLY_SOFTMAX_NORM SOFT_MAX: 1 x 39.2 us = 39.2 us
+Total time: 18839.7 us.
+/home/dylan/AI/engine-lab/src/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp:14374: GGML_ASSERT(ctx->compute_ctx.expired()) failed
+/home/dylan/AI/engine-lab/src/build/bin/libggml-base.so.0(+0x17a66) [0x7d0a60318a66]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-base.so.0(+0x17eed) [0x7d0a60318eed]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-base.so.0(ggml_abort+0x166) [0x7d0a603190d6]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-vulkan.so.0(+0x14b871) [0x7d0a5bf4b871]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-vulkan.so.0(+0x14d62a) [0x7d0a5bf4d62a]
+/home/dylan/AI/engine-lab/src/build/bin/libggml-base.so.0(ggml_backend_sched_graph_compute_async+0x3d7) [0x7d0a60337fd7]
+/home/dylan/AI/engine-lab/src/build/bin/libllama.so.0(_ZN13llama_context13graph_computeEP11ggml_cgraphb+0xdb) [0x7d0a5ea32d2b]
+/home/dylan/AI/engine-lab/src/build/bin/libllama.so.0(_ZN13llama_context14process_ubatchERK12llama_ubatch14llm_graph_typeP22llama_memory_context_iR11ggml_status+0x133) [0x7d0a5ea36c23]
+/home/dylan/AI/engine-lab/src/build/bin/libllama.so.0(_ZN13llama_context6decodeERK15llama_batch_ext+0x456) [0x7d0a5ea40116]
+/home/dylan/AI/engine-lab/src/build/bin/libllama-common.so.0(_Z23common_init_from_paramsR13common_paramsb+0x38f) [0x7d0a5f07fd2f]
+/home/dylan/AI/engine-lab/src/build/bin/libllama-server-impl.so(_ZN19server_context_impl10load_modelER13common_params+0x5df) [0x7d0a5fda271f]
+/home/dylan/AI/engine-lab/src/build/bin/libllama-server-impl.so(_Z12llama_serverR13common_paramsiPPcR12server_child+0x3e8b) [0x7d0a5fcd7bfb]
+/home/dylan/AI/engine-lab/src/build/bin/libllama-server-impl.so(_Z12llama_serveriPPc+0x1173) [0x7d0a5fcd9fa3]
+/usr/lib/x86_64-linux-gnu/libc.so.6(+0x2a601) [0x7d0a5f42a601]
+/usr/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x88) [0x7d0a5f42a718]
+/home/dylan/AI/engine-lab/src/build/bin/llama-server(+0x1325) [0x5db1ba123325]
+done 2026-10-18T23:58:01+00:00
+vram at release: 10 MiB
+{"ok":true} http=200
