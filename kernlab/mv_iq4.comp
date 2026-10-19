@@ -1,0 +1,60 @@
+#version 450
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_integer_dot_product : require
+#extension GL_EXT_control_flow_attributes : require
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_clustered : require
+layout(local_size_x = 64) in;
+layout(binding=0) readonly buffer Q { uvec4 q[]; };
+layout(binding=1) readonly buffer D { float16_t dw[]; };
+layout(binding=2) readonly buffer X { uvec4 xq[]; };   // permuted: word i = {x[2i],x[2i+16],x[2i+1],x[2i+17]}
+layout(binding=3) readonly buffer M { vec2 xm[]; };
+layout(binding=4) writeonly buffer O { float dst[]; };
+layout(push_constant) uniform P { uint nsb; uint rows; uint qoff; uint doff; } pc;
+#ifndef R
+#define R 1
+#endif
+#define LPR 16
+#define RG (64/LPR)
+#ifndef NCOPY
+#define NCOPY 1
+#endif
+shared uint lut2[256*NCOPY];
+const int kv[16] = int[16](-127,-104,-83,-65,-49,-35,-22,-10,1,13,25,38,53,69,89,113);
+void main(){
+  uint lid = gl_LocalInvocationID.x;
+  for (uint i=lid;i<256*NCOPY;i+=64) { uint b=i&255; lut2[i] = uint(kv[b&15]&0xff) | (uint(kv[b>>4]&0xff)<<8); }
+  barrier();
+  uint lane = lid % LPR;
+  uint rg = lid / LPR;
+  uint cb = (lid % NCOPY) * 256;
+  uint row0 = (gl_WorkGroupID.x * RG + rg) * R;
+  float acc[R];
+  for (uint k=0;k<R;k++) acc[k]=0.0;
+  [[unroll]] for (uint s=lane; s<pc.nsb; s+=LPR) {
+    uvec4 xa = xq[2*s], xb = xq[2*s+1];
+    float dx = xm[s].x;
+    [[unroll]] for (uint k=0;k<R;k++) {
+      uint idx = (row0+k)*pc.nsb + s;
+      uvec4 w = q[pc.qoff + idx];
+      float d = float(dw[pc.doff + idx]);
+      int dot = 0;
+      #define B(v,n) (((v)>>(8*(n)))&0xffu)
+      #define WD(v,n) (lut2[cb+B(v,n)] | (lut2[cb+B(v,n+1)]<<16))
+      dot = dotPacked4x8AccSatEXT(int(WD(w.x,0)), int(xa.x), dot);
+      dot = dotPacked4x8AccSatEXT(int(WD(w.x,2)), int(xa.y), dot);
+      dot = dotPacked4x8AccSatEXT(int(WD(w.y,0)), int(xa.z), dot);
+      dot = dotPacked4x8AccSatEXT(int(WD(w.y,2)), int(xa.w), dot);
+      dot = dotPacked4x8AccSatEXT(int(WD(w.z,0)), int(xb.x), dot);
+      dot = dotPacked4x8AccSatEXT(int(WD(w.z,2)), int(xb.y), dot);
+      dot = dotPacked4x8AccSatEXT(int(WD(w.w,0)), int(xb.z), dot);
+      dot = dotPacked4x8AccSatEXT(int(WD(w.w,2)), int(xb.w), dot);
+      acc[k] += d * dx * float(dot);
+    }
+  }
+  for (uint k=0;k<R;k++) {
+    float a = subgroupClusteredAdd(acc[k], LPR);
+    if (lane==0) dst[row0+k] = a;
+  }
+}

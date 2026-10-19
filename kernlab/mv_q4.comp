@@ -1,0 +1,55 @@
+#version 450
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_integer_dot_product : require
+#extension GL_EXT_control_flow_attributes : require
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_clustered : require
+layout(local_size_x = 64) in;
+layout(binding=0) readonly buffer Q { uvec4 q[]; };
+layout(binding=1) readonly buffer D { float16_t dw[]; };
+layout(binding=2) readonly buffer X { uvec4 xq[]; };
+layout(binding=3) readonly buffer M { vec2 xm[]; };
+layout(binding=4) writeonly buffer O { float dst[]; };
+layout(push_constant) uniform P { uint nsb; uint rows; uint qoff; uint doff; } pc;
+#ifndef R
+#define R 1
+#endif
+#ifndef LPR
+#define LPR 16
+#endif
+#define RG (64/LPR)
+void main(){
+  uint lane = gl_LocalInvocationID.x % LPR;
+  uint rg = gl_LocalInvocationID.x / LPR;
+  uint row0 = (gl_WorkGroupID.x * RG + rg) * R;
+  float acc[R];
+  for (uint k=0;k<R;k++) acc[k]=0.0;
+  [[unroll]] for (uint s=lane; s<pc.nsb; s+=LPR) {
+    uvec4 xa = xq[2*s], xb = xq[2*s+1];
+    vec2 m = xm[s];
+    [[unroll]] for (uint k=0;k<R;k++) {
+      uint idx = (row0+k)*pc.nsb + s;
+      uvec4 w = q[pc.qoff + idx];
+#ifdef NOMATH
+      acc[k] += float(w.x ^ w.y ^ w.z ^ w.w);
+#else
+      float d = float(dw[pc.doff + idx]);
+      int dot = 0;
+      dot = dotPacked4x8AccSatEXT(int(w.x & 0x0F0F0F0Fu), int(xa.x), dot);
+      dot = dotPacked4x8AccSatEXT(int(w.y & 0x0F0F0F0Fu), int(xa.y), dot);
+      dot = dotPacked4x8AccSatEXT(int(w.z & 0x0F0F0F0Fu), int(xa.z), dot);
+      dot = dotPacked4x8AccSatEXT(int(w.w & 0x0F0F0F0Fu), int(xa.w), dot);
+      dot = dotPacked4x8AccSatEXT(int((w.x>>4) & 0x0F0F0F0Fu), int(xb.x), dot);
+      dot = dotPacked4x8AccSatEXT(int((w.y>>4) & 0x0F0F0F0Fu), int(xb.y), dot);
+      dot = dotPacked4x8AccSatEXT(int((w.z>>4) & 0x0F0F0F0Fu), int(xb.z), dot);
+      dot = dotPacked4x8AccSatEXT(int((w.w>>4) & 0x0F0F0F0Fu), int(xb.w), dot);
+      acc[k] += d * (m.x*float(dot) - m.y);
+#endif
+    }
+  }
+  for (uint k=0;k<R;k++) {
+    float a = subgroupClusteredAdd(acc[k], LPR);
+    if (lane==0) dst[row0+k] = a;
+  }
+}

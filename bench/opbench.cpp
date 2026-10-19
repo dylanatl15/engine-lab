@@ -61,6 +61,7 @@ int main(int argc, char ** argv) {
             static thread_local ggml_tensor * x = nullptr; if (i == 0) x = T(c, GGML_TYPE_F32, k);
             return ggml_mul_mat(c, pool[i % pool.size()], x); }, npool});
     };
+    for (ggml_type rt : {GGML_TYPE_F16, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q4_0, GGML_TYPE_Q4_K, GGML_TYPE_Q6_K, GGML_TYPE_IQ4_XS, GGML_TYPE_IQ3_S}) mm("ROOF", rt, 4096, 16384);
     mm("hc_down", GGML_TYPE_BF16, 10240, 320);
     mm("hc_up", GGML_TYPE_BF16, 320, 10240);
     mm("hc_inject", GGML_TYPE_BF16, 10240, 4);
@@ -127,5 +128,6 @@ int main(int argc, char ** argv) {
         double us = run(c);
         printf("%-48s %8.2f us/op\n", c.name.c_str(), us); fflush(stdout);
     }
+    ggml_backend_free(be);
     return 0;
 }

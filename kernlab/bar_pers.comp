@@ -1,0 +1,23 @@
+#version 450
+layout(local_size_x=64) in;
+layout(binding=0) coherent buffer A { float a[]; };
+layout(binding=1) coherent buffer B { float b[]; };
+layout(binding=2) coherent buffer C { uint cnt[]; };
+layout(push_constant) uniform P { uint n; uint par; uint nph; uint pad; } p;
+void main(){
+  uint i = gl_GlobalInvocationID.x;
+  uint nwg = gl_NumWorkGroups.x;
+  uint j = (i + 64u*3u + 5u) % p.n;
+  for (uint ph = 0u; ph < p.nph; ph++) {
+    if ((ph & 1u) == 0u) b[i] = a[j] * 0.5 + 1.0; else a[i] = b[j] * 0.5 + 1.0;
+    memoryBarrierBuffer();
+    barrier();
+    if (gl_LocalInvocationID.x == 0u) {
+      atomicAdd(cnt[0], 1u);
+      uint target = (ph + 1u) * nwg;
+      while (atomicAdd(cnt[0], 0u) < target) { }
+    }
+    barrier();
+    memoryBarrierBuffer();
+  }
+}

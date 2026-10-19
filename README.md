@@ -1,6 +1,6 @@
 # engine-lab
 
-**A 125B-parameter model at 15–17 tokens/second on one 16 GB graphics card from 2019.**
+**A 125B-parameter model at 24 tokens/second on one 16 GB graphics card from 2019.**
 
 This repo is the patch set, launcher, test harness and raw lab notebook behind getting
 Qwen3.8-Flash-Next (a 125B-class mixture-of-experts model) to run at interactive speed on a single
@@ -10,7 +10,7 @@ fix what turned out to be a *plumbing* problem, not a compute problem.
 
 | One Radeon VII, 64 GB DDR4 host, IQ3_XXS quant | Stock offload | This repo |
 |---|---|---|
-| Decode, short prompt | 8.5 t/s | **15–17 t/s** |
+| Decode, short prompt | 8.5 t/s | **24 t/s** (15–17 before the fused ops below) |
 | Decode with 31K tokens already in context | 7.5 t/s | **14.7–15.3 t/s** |
 | Prefill, 31.5K-token prompt | ~40 t/s (13 min) | **138 t/s (~4 min)** |
 | Prefill, small prompts | 45–52 t/s | **56–68 t/s** |
@@ -80,6 +80,61 @@ The first version of this section said ~1.3 ms per layer. Two later changes cut 
 Result on Flash-Next, one Radeon VII, 12 copy threads, cache 8500 MiB: 200-token decode 19.4–19.9 t/s
 (was 18.1–18.4 with the fused op disabled in the same session), per-layer gap 913 µs (was ~1170 µs
 in that A/B). What is left is mostly GPU launch latency (~59 dispatches per layer) and the per-layer sync.
+
+## Second pass: the GPU is the bottleneck (2026-10-19, 20 → 24.5 t/s)
+
+Once uploads were out of the way, the engine turned out to be **GPU-bound**: kernel time per token
+equals wall time per token. A decode step is ~40 ms = 48 MoE layers x ~0.84 ms, of which only a few
+hundred microseconds per layer is real bandwidth. The rest is dependent small dispatches. Measured
+floors on this card (see `kernlab/`):
+
+- A chain of dependent dispatches with a compute-only barrier costs **4.7-5.5 µs per link**; in the real
+  engine the floor is ~7 µs. A persistent kernel with an atomic grid barrier does the same in
+  **1.9-2.3 µs** (240 workgroups, all co-resident), so a megakernel layer could save ~10-15%, but it is a
+  very large project. Narrowing the pipeline barrier flags is worth 1.9 µs in kernlab and **zero** in
+  the engine (tried, reverted).
+- A matvec at the measured roofline (`kernlab/mv_*.comp`) reads ~130-160 GB/s for the 4 MB expert ops;
+  they are latency-bound (ramp-up, tail, load -> LDS lookup -> reduce), not bandwidth- or ALU-bound.
+- `bench/opbench.cpp` has ~27 µs of harness overhead per op, so isolated timings flatter nothing.
+
+What went in, all in the Vulkan backend and `src/models/qwen4exp.cpp`, all **on by default** with `=0` opt-out:
+
+| Knob | What it does | Effect |
+|---|---|---|
+| `LAB_GDN_PRE` | `gdn_pre.comp`: the conv/norm/gate prologue of the delta-net layer as one dispatch | ~9% of the GDN layer |
+| `LAB_GDN_CACHE` | delta-net state read through the cache-friendly access mode | +1.3% |
+| `LAB_MOE_COMBINE` | `ggml_moe_combine`: weighted expert sum + shared expert + residual in one dispatch | ~5% per layer with the next |
+| `LAB_GATED_NORM` | `ggml_gated_norm`: rmsnorm * silu gate in one dispatch | (see above) |
+| `LAB_MMVQ_GRID` | integer-dot MMVQ kernels for the grid quants (iq2_xxs/xs/s, iq3_xxs/s, iq4_nl). Default 1 = only iq3_s and iq4_nl, where they win (dense iq3_s -14.5 µs per block). The expert-side iq2/iq3_xxs kernels were 2-5 µs *slower* than the float path, so 0 = all float, 2 = all MMVQ | -0.3 to -0.5% of block time |
+| `LAB_REPACK=1` (opt-in) | IQ4_XS weights repacked structure-of-arrays at load | ~3% GPU time on IQ4_XS ops only |
+
+Plumbing that is in the tree but is a no-op unless asked for: an expert-id mailbox (`moe_mailbox.comp`),
+deferred submit (`ENGINE_LAB_DEFER`, no gain), scheduler timers (`ENGINE_LAB_SCHT`), per-op timers
+(`ENGINE_LAB_VKT`), graph dump (`ENGINE_LAB_DUMP_GRAPH`, `ENGINE_LAB_DUMP_FUSED`).
+
+Precision: every new op matches its unfused chain in `test-backend-ops` (`MOE_COMBINE`, `GATED_NORM`,
+`HC_MIX`, `GATED_DELTA_NET`, and the MMVQ types for MUL_MAT / MUL_MAT_ID). The fused ops reorder float
+sums, so they differ at the 1e-6 level like the earlier `HC_MIX`; the integer-dot kernels quantize the
+activation to q8_1, the same thing the CPU path and the stock MMVQ kernels already do. `LAB_MMVQ_GRID=0`
+and the `=0` opt-outs restore the old numerics exactly.
+
+Measured, same machine, 200-token decode: **24.3-24.6 t/s** with the default knobs (per-layer gap
+~382 µs, readback+sync ~414 µs, upload ~80 µs). With the perf logger on, decode drops to ~9.6 t/s from
+host overhead, so wall-clock comparisons are done interleaved and order-balanced (the first run of a
+pair is systematically slower).
+
+**Multi-slot throughput** (`-np 4`, decode-only aggregate): 14.8 t/s at one stream, 17.2 at two, 22.4 at
+four. A two-token step costs ~1.7x a one-token step because the union of selected experts doubles, so
+batched or speculative-verify decode is not a cheap win without a small-n expert matvec.
+
+More dead ends: more threads alone, a transfer queue, eviction policy, cheap co-occurrence prefetch,
+rows-per-workgroup knobs, forcing MMVQ everywhere, removing the scheduler's pre-callback sync alone,
+command-pool reset guard, deferring the sync, an IQ4_XS LDS lookup table in the stock kernel, and
+skip-op studies (invalid for whole-graph timing).
+
+Still on the list: q6_K and q4_K/q5_K (including the 436 MB output matrix), the q2_0 expert down
+projection (the single biggest op at ~62 µs per layer), expert gate+up+down+combine as one chain,
+`HC_MIX` (still ~12% of block time), and the second card.
 
 ## Does it still give the same answers?
 
@@ -215,11 +270,13 @@ Start the server with the cache stats on (they print at shutdown) and compare:
 
 | Path | Contents |
 |---|---|
-| `patches/` | the llama.cpp diff against 547208d (applies cleanly); includes the fused HC_MIX op |
+| `patches/` | the llama.cpp diff against 547208d (`git apply`); moe-cache, HC_MIX and the second-pass fused ops |
 | `run-flash-next.sh` | launcher with the settings above |
 | `scripts/` | GPU window harness, determinism, needle and perplexity probes |
 | `results/` | per-run logs, with `results/runs/` holding each run's console summary |
 | `trace/` | expert-routing trace tooling and workload generator |
+| `kernlab/` | stand-alone Vulkan micro-benchmarks: matvec roofline, dispatch chains, persistent-kernel grid barrier |
+| `bench/` | `opbench` (per-op timing), `chainbench`, `gdnpre_check` |
 
 The numbers were taken on an HP Z640 (Xeon E5-2680 v4, 64 GB quad-channel DDR4, Radeon VII on
 PCIe 3.0 x16, RADV). The scripts take a lease on a GPU broker that is specific to my setup, so
