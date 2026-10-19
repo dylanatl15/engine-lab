@@ -74,15 +74,21 @@ int main(int argc, char ** argv) {
     mm("shexp_up_proj", GGML_TYPE_IQ3_S, 2560, 640);
     mm("shexp_down", GGML_TYPE_IQ4_NL, 640, 2560);
     // MUL_MAT_ID experts: 10 of 512
-    auto mid = [&](const char * nm, ggml_type t, int64_t k, int64_t m, bool down) {
-        cs.push_back({std::string("MUL_MAT_ID ") + nm + " " + ggml_type_name(t), [=](ggml_context * c, int i) {
+    auto mid = [&](const char * nm, ggml_type t, int64_t k, int64_t m, bool down, int nu = 10) {
+        cs.push_back({std::string("MUL_MAT_ID ") + nm + " " + ggml_type_name(t) + (nu != 10 ? " nu=" + std::to_string(nu) : ""), [=](ggml_context * c, int i) {
             static thread_local ggml_tensor * ids = nullptr, * x = nullptr, * xd = nullptr; static thread_local std::vector<ggml_tensor*> pool; static thread_local ggml_context * pc = nullptr;
-            if (i == 0 || pc != c) { pool.clear(); pc = c; ids = T(c, GGML_TYPE_I32, 10, 1); x = T(c, GGML_TYPE_F32, k, 1, 1); xd = T(c, GGML_TYPE_F32, k, 10, 1); }
+            if (i == 0 || pc != c) { pool.clear(); pc = c; ids = T(c, GGML_TYPE_I32, nu, 1); x = T(c, GGML_TYPE_F32, k, 1, 1); xd = T(c, GGML_TYPE_F32, k, nu, 1); }
             while ((int)pool.size() < 12) pool.push_back(T(c, t, k, m, 512));
             return ggml_mul_mat_id(c, pool[i % pool.size()], down ? xd : x, ids); }, 12});
     };
     mid("gate", GGML_TYPE_IQ2_XXS, 2560, 640, false);
     mid("down", GGML_TYPE_Q2_0, 640, 2560, true);
+    for (int nu : {1, 2, 5, 20}) mid("gate", GGML_TYPE_IQ2_XXS, 2560, 640, false, nu);
+    mid("gate", GGML_TYPE_IQ2_XS, 2560, 640, false);
+    mid("gate", GGML_TYPE_IQ2_S, 2560, 640, false);
+    mid("gate", GGML_TYPE_IQ3_XXS, 2560, 640, false);
+    mid("gate", GGML_TYPE_IQ3_S, 2560, 640, false);
+    mid("down", GGML_TYPE_IQ4_NL, 640, 2560, true);
     // elementwise / small
     auto ew = [&](const char * nm, std::function<ggml_tensor*(ggml_context*, ggml_tensor*, ggml_tensor*)> f, int64_t a, int64_t b = 1) {
         cs.push_back({std::string("EW ") + nm, [=](ggml_context * c, int i) {
@@ -104,6 +110,12 @@ int main(int argc, char ** argv) {
     ew("cont 3x10240", [](ggml_context * c, ggml_tensor * x, ggml_tensor *) { return ggml_cont(c, ggml_view_2d(c, x, 3, 10240, x->nb[1], 0)); }, 5, 10240);
     ew("ssm_conv", [](ggml_context * c, ggml_tensor * x, ggml_tensor * y) { return ggml_ssm_conv(c, x, y); }, 5, 10240);
     cs.back().mk = [](ggml_context * c, int i) { static thread_local ggml_tensor * x = nullptr, * w = nullptr; if (i == 0) { x = T(c, GGML_TYPE_F32, 5, 10240); w = T(c, GGML_TYPE_F32, 4, 10240); } return ggml_ssm_conv(c, x, w); };
+    cs.push_back({"HC_MIX fused 2560x4 (pool 8)", [](ggml_context * c, int i) {
+        static thread_local std::vector<ggml_tensor*> wd, wu, wi; static thread_local ggml_context * pc = nullptr;
+        static thread_local ggml_tensor * x = nullptr, * g = nullptr;
+        if (i == 0 || pc != c) { wd.clear(); wu.clear(); wi.clear(); pc = c; x = T(c, GGML_TYPE_F32, 2560, 4, 1); g = T(c, GGML_TYPE_F32, 2560, 4, 1);
+            for (int k = 0; k < 8; k++) { wd.push_back(T(c, GGML_TYPE_BF16, 10240, 320)); wu.push_back(T(c, GGML_TYPE_BF16, 320, 10240)); wi.push_back(T(c, GGML_TYPE_BF16, 10240, 4)); } }
+        return ggml_hc_mix(c, x, g, wd[i % 8], wu[i % 8], wi[i % 8], 1e-6f); }, 40});
     cs.push_back({"HC_PRE_gated 2560x4", [](ggml_context * c, int i) { static thread_local ggml_tensor * x = nullptr, * g = nullptr; if (i == 0) { x = T(c, GGML_TYPE_F32, 2560, 4, 1); g = T(c, GGML_TYPE_F32, 2560, 4, 1); } return ggml_dsv4_hc_pre_gated(c, x, g, 0.25f); }, 40});
     cs.push_back({"HC_POST 2560x4", [](ggml_context * c, int i) { static thread_local ggml_tensor * x = nullptr, * r = nullptr, * w = nullptr; if (i == 0) { x = T(c, GGML_TYPE_F32, 2560, 1); r = T(c, GGML_TYPE_F32, 2560, 4, 1); w = T(c, GGML_TYPE_F32, 4, 1); } return ggml_dsv4_hc_post(c, x, r, w, nullptr); }, 40});
     cs.push_back({"GATED_DELTA_NET", [](ggml_context * c, int i) {

@@ -65,9 +65,21 @@ VRAM, which makes the recurrent-state ops about 30× slower. Setting
 
 ### Where the time goes now
 
-About 1.3 ms per layer, of which roughly 450 µs is the CPU recording and submitting the Vulkan graph
-(~145 nodes per layer), about 110 µs is expert upload, and the rest is GPU compute and a per-layer
-sync. The cache is no longer the limiting factor. Fixed per-layer overhead is.
+The first version of this section said ~1.3 ms per layer. Two later changes cut that to about 1.0 ms:
+
+- **A spinning memcpy pool with 64 KB chunks** (the expert upload goes through pinned staging memory):
+  upload per layer fell from ~350 µs to ~65 µs. That alone was about +20% decode.
+- **A fused `HC_MIX` op** (`ggml_hc_mix`, Vulkan only, single-token decode). Qwen3.8's hyper-connection
+  mix is a chain of ~12 small ops per half layer (grouped rmsnorm, bf16 down projection, silu, bf16 up
+  projection, sigmoid gate, stream mean, bf16 inject projection). Dispatch latency, not bandwidth,
+  dominates them: ~75 µs per half layer on the GPU. The fused op is two dispatches and ~31 µs. The first
+  stage streams each bf16 weight row exactly once with `x * gamma` staged in shared memory, the second
+  finishes the norm and bottleneck in a prologue and does the gate dot products. `ENGINE_LAB_NO_HC_MIX=1`
+  turns it off for A/B tests.
+
+Result on Flash-Next, one Radeon VII, 12 copy threads, cache 8500 MiB: 200-token decode 19.4–19.9 t/s
+(was 18.1–18.4 with the fused op disabled in the same session), per-layer gap 913 µs (was ~1170 µs
+in that A/B). What is left is mostly GPU launch latency (~59 dispatches per layer) and the per-layer sync.
 
 ## Does it still give the same answers?
 
@@ -83,6 +95,14 @@ A 0.05% spread is noise. The larger differences you will see between *kernel pat
 CPU-side experts, 6.47 with the GPU batch upload path) are numerics, not cache bugs. The CPU path
 quantizes activations to q8_K and the GPU path to q8_1, and batched versus sequential delta-net
 differ slightly. Those gaps are 2–5% perplexity.
+
+Fused `HC_MIX` check (2026-10-19): on real activations the fused op matches the unfused chain to
+~1e-7 relative at every layer (2208 layer/token pairs, `llama-hccheck` in `examples/eval-callback`, run
+with `ENGINE_LAB_HCMIX_CHECK=1`). End-to-end the 1e-7 noise gets rounded differently further on in
+the network (logits differ by up to ~0.06 on the first token), which on the 3-chunk text moves
+perplexity 6.19 to 6.32. On 16 chunks the gap shrinks to 5.915 (unfused) vs 5.945 (fused), +0.5%,
+well inside the ±0.21 statistical error. That is numerics noise of the same kind as the kernel-path
+differences above, not a change in what is computed.
 
 Behaviour checks on the full setup: needle retrieval 6/6 at ~29K, and a
 tool-calling gate of 17/18 correct with no malformed JSON (the dense 27B model scored 18/18).
@@ -115,7 +135,7 @@ You need a Vulkan-capable AMD GPU with 16 GB, about 64 GB of RAM, and the GGUF
 ```bash
 git clone https://github.com/ggml-org/llama.cpp && cd llama.cpp
 git checkout 547208d
-git apply /path/to/engine-lab/patches/lab-547208d-moe-cache-pinned-parallel.patch
+git apply /path/to/engine-lab/patches/lab-547208d-moe-cache-pinned-parallel-hcmix.patch
 cmake -B build -DGGML_VULKAN=ON && cmake --build build -j --target llama-server
 ```
 
@@ -195,7 +215,7 @@ Start the server with the cache stats on (they print at shutdown) and compare:
 
 | Path | Contents |
 |---|---|
-| `patches/` | the llama.cpp diff against 547208d (applies cleanly) |
+| `patches/` | the llama.cpp diff against 547208d (applies cleanly); includes the fused HC_MIX op |
 | `run-flash-next.sh` | launcher with the settings above |
 | `scripts/` | GPU window harness, determinism, needle and perplexity probes |
 | `results/` | per-run logs, with `results/runs/` holding each run's console summary |

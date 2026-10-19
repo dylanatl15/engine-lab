@@ -1,0 +1,11 @@
+0.01.791.765 W llama_model_loader: tensor overrides to CPU are used with mmap enabled - consider using --load-mode none for better performance
+0.05.112.098 I cmn          init: llama threadpool init, n_threads = 14
+0.05.625.169 I 
+0.05.625.296 I system_info: n_threads = 14 (n_threads_batch = 14) / 28 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.05.625.318 I perplexity: tokenizing the input ..
+0.05.686.141 I perplexity: tokenization took 60.815 ms
+0.05.686.186 I perplexity: calculating perplexity over 16 chunks, n_ctx=512, batch_size=1, n_seq=1
+0.30.615.013 I perplexity: 24.93 seconds per pass - ETA 6.63 minutes
+[1]8.8090,[2]7.3395,[3]6.3195,[4]5.5939,[5]5.1852,[6]5.0397,[7]4.8961,[8]5.1089,[9]5.0841,[10]5.1474,[11]5.2181,[12]5.3451,[13]5.3550,[14]5.3760,[15]5.6532,[16]5.9451,
+6.52.174.441 I Final estimate: PPL = 5.9451 +/- 0.21412
+

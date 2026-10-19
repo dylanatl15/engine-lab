@@ -1,0 +1,7 @@
+start 2026-10-19T02:02:19+00:00 cache=8500 jobs=6
+lease 106 2026-10-19T02:02:19+00:00
+vram free check: 10 MiB
+1.26.941.020 I Final estimate: PPL = 6.1891 +/- 0.54988
+done 2026-10-19T02:03:47+00:00
+vram at release: 10 MiB
+{"ok":true} http=200
