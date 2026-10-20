@@ -282,6 +282,28 @@ The numbers were taken on an HP Z640 (Xeon E5-2680 v4, 64 GB quad-channel DDR4, 
 PCIe 3.0 x16, RADV). The scripts take a lease on a GPU broker that is specific to my setup, so
 treat them as examples to adapt rather than something to run unchanged.
 
+## Third pass: host gaps, DMA, and what did not work
+
+- **GPU timeline.** A decode token spans ~49 ms: ~35 ms GPU busy, ~14 ms idle in ~65 gaps of ~210 us. Each
+  layer's host round trip is memcpy (~35-54 us) + command recording (~79 us) + submit (~22 us) + launch (~12 us).
+  About 72 expert misses per token (83% hit rate), ~1.65 MiB each, so ~119 MiB per token over PCIe at ~9.7 GB/s.
+- **DEFER + coarse submits** (pre-record the next split, run the callback, then submit uploads and compute; one
+  submission per chunk) is worth ~3-4.5% on decode only. Either alone is 0 or negative. It is on by default for
+  single-token decode graphs (`ENGINE_LAB_DECODE_FAST=0` opts out); prefill is unaffected and output is identical.
+- **In-process A/B** (`ENGINE_LAB_ABT=N`, `ENGINE_LAB_ABK=...`) flips knobs every N evaluations and reports
+  ms/token per mode with a standard error. Separate runs of the same config vary by +-8%, so this is the only way
+  to see 3% effects.
+- **Dead ends:** GPU clock pinning (no wall gain, and it needs root), zero-copy host-pointer import of experts
+  (the model is 76 GB, RAM 64 GB, GTT 31 GB), a transfer queue, eviction policies, co-occurrence prefetch,
+  hybrid CPU-miss compute, deeper HC_MIX rewrites (it is within ~2% of its floor), MTP/n-gram speculation.
+  An earlier per-token logger overstated some gaps; the numbers above are from the corrected instrumentation.
+- **dmalab** (`kernlab/dmalab.cpp`): pinned to device copy 9.7 GB/s (queue family 0) and 9.63 (family 1), imported
+  host pointer 8.5-8.8, shader read from host memory 12.2, device stream read 452. Compute plus copy overlap
+  17 ms vs 21 ms serial.
+- **Next-layer predictor** (`LAB_PRED=1`): applying layer L+1's router to layer L's FFN input predicts 64% of the
+  experts a layer uses and 55% of the ones that miss the cache. That caps async prefetch at roughly 3-5% after
+  overlap loss and wasted uploads, so it is parked behind other work.
+
 ## What is next
 
 A second identical card. With two GPUs the interesting questions are pooling the expert cache

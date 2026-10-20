@@ -117,6 +117,12 @@ int main(int argc, char ** argv) {
         if (i == 0 || pc != c) { wd.clear(); wu.clear(); wi.clear(); pc = c; x = T(c, GGML_TYPE_F32, 2560, 4, 1); g = T(c, GGML_TYPE_F32, 2560, 4, 1);
             for (int k = 0; k < 8; k++) { wd.push_back(T(c, GGML_TYPE_BF16, 10240, 320)); wu.push_back(T(c, GGML_TYPE_BF16, 320, 10240)); wi.push_back(T(c, GGML_TYPE_BF16, 10240, 4)); } }
         return ggml_hc_mix(c, x, g, wd[i % 8], wu[i % 8], wi[i % 8], 1e-6f); }, 40});
+    cs.push_back({"HC_MIX fused 2560x4 (pool 48)", [](ggml_context * c, int i) {
+        static thread_local std::vector<ggml_tensor*> wd, wu, wi; static thread_local ggml_context * pc = nullptr;
+        static thread_local ggml_tensor * x = nullptr, * g = nullptr;
+        if (i == 0 || pc != c) { wd.clear(); wu.clear(); wi.clear(); pc = c; x = T(c, GGML_TYPE_F32, 2560, 4, 1); g = T(c, GGML_TYPE_F32, 2560, 4, 1);
+            for (int k = 0; k < 48; k++) { wd.push_back(T(c, GGML_TYPE_BF16, 10240, 320)); wu.push_back(T(c, GGML_TYPE_BF16, 320, 10240)); wi.push_back(T(c, GGML_TYPE_BF16, 10240, 4)); } }
+        return ggml_hc_mix(c, x, g, wd[i % 48], wu[i % 48], wi[i % 48], 1e-6f); }, 96});
     cs.push_back({"HC_PRE_gated 2560x4", [](ggml_context * c, int i) { static thread_local ggml_tensor * x = nullptr, * g = nullptr; if (i == 0) { x = T(c, GGML_TYPE_F32, 2560, 4, 1); g = T(c, GGML_TYPE_F32, 2560, 4, 1); } return ggml_dsv4_hc_pre_gated(c, x, g, 0.25f); }, 40});
     cs.push_back({"HC_POST 2560x4", [](ggml_context * c, int i) { static thread_local ggml_tensor * x = nullptr, * r = nullptr, * w = nullptr; if (i == 0) { x = T(c, GGML_TYPE_F32, 2560, 1); r = T(c, GGML_TYPE_F32, 2560, 4, 1); w = T(c, GGML_TYPE_F32, 4, 1); } return ggml_dsv4_hc_post(c, x, r, w, nullptr); }, 40});
     cs.push_back({"GATED_DELTA_NET", [](ggml_context * c, int i) {
