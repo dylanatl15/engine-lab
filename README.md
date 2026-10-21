@@ -8,6 +8,8 @@ Radeon VII, with the weights sitting mostly in ordinary system RAM. Nothing here
 inference engine. It is a set of changes to [llama.cpp](https://github.com/ggml-org/llama.cpp) that
 fix what turned out to be a *plumbing* problem, not a compute problem.
 
+![decode speed](docs/decode-speed.svg)
+
 | One Radeon VII, 64 GB DDR4 host, IQ3_XXS quant | Stock offload | This repo |
 |---|---|---|
 | Decode, short prompt | 8.5 t/s | **24 t/s** (15–17 before the fused ops below) |
@@ -304,9 +306,25 @@ treat them as examples to adapt rather than something to run unchanged.
   experts a layer uses and 55% of the ones that miss the cache. That caps async prefetch at roughly 3-5% after
   overlap loss and wasted uploads, so it is parked behind other work.
 
+## Try it on your own card
+
+Single GPU is the point: you do not need two cards. Any Vulkan GPU with 12-16 GB and a big model
+whose experts do not fit in VRAM is the target (tested only on a Radeon VII so far).
+
+```bash
+git clone -b lab https://github.com/dylanatl15/llama.cpp-lab && cd llama.cpp-lab
+cmake -B build -DGGML_VULKAN=ON && cmake --build build -j --target llama-server
+MODEL=/path/to/model-00001-of-0000N.gguf BIN=$PWD/build/bin ../engine-lab/scripts/bench.sh   # lab cache
+MODEL=/path/to/model-00001-of-0000N.gguf BIN=$PWD/build/bin CACHE_MIB=0 ../engine-lab/scripts/bench.sh   # stock offload
+```
+
+`CACHE_MIB` is how much VRAM the expert cache gets (8500 fits a 16 GB card with the KV cache; keep it
+under what is left after the dense weights). `NCMOE` is the number of layers whose experts stay in
+RAM. If you run it on another GPU, open an issue with your numbers.
+
 ## What is next
 
-A second identical card. With two GPUs the interesting questions are pooling the expert cache
+A second identical card is on the way. With two GPUs the interesting questions are pooling the expert cache
 across both and splitting the per-layer overhead, which is now the dominant cost.
 
 ## Credits and license
