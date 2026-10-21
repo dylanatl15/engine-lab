@@ -193,7 +193,7 @@ You need a Vulkan-capable AMD GPU with 16 GB, about 64 GB of RAM, and the GGUF
 git clone https://github.com/ggml-org/llama.cpp && cd llama.cpp
 git checkout 547208d
 git apply /path/to/engine-lab/patches/lab-547208d-moe-cache-pinned-parallel-hcmix.patch
-cmake -B build -DGGML_VULKAN=ON && cmake --build build -j --target llama-server
+cmake -B build -DGGML_VULKAN=ON -DCMAKE_BUILD_TYPE=Release && cmake --build build -j --target llama-server
 ```
 
 Then edit the model path in `run-flash-next.sh` and run it. The settings it uses, and why:
@@ -310,6 +310,8 @@ treat them as examples to adapt rather than something to run unchanged.
 
 Single GPU is the point: you do not need two cards. Any Vulkan GPU with 12-16 GB and a big model
 whose experts do not fit in VRAM is the target (tested only on a Radeon VII so far).
+
+Needs a C++ toolchain, CMake, the Vulkan dev files and `glslc` (on Debian/Ubuntu: `libvulkan-dev spirv-headers glslc`), plus `curl` and `python3` for the bench script. A cold build takes about 3 minutes on 10 cores.
 
 ```bash
 git clone -b lab https://github.com/dylanatl15/llama.cpp-lab && cd llama.cpp-lab
